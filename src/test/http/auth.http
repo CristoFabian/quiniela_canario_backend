@@ -1,0 +1,70 @@
+### ─────────────────────────────────────────────────────────────
+### VARIABLES
+### ─────────────────────────────────────────────────────────────
+@baseUrl = http://localhost:8080
+@token = <pega_aqui_el_token_del_login>
+
+
+### ─── AUTH ──────────────────────────────────────────────────────────
+
+### 1. Registro
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "username": "juanito",
+  "email": "juanito@mail.com",
+  "password": "secret123"
+}
+
+### 2. Login → copia el "token" en @token
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "juanito",
+  "password": "secret123"
+}
+
+
+### ─── JUGADOR (ROLE_USER) ────────────────────────────────────────────
+
+### 3. Ver mi perfil
+GET {{baseUrl}}/api/jugador/perfil
+Authorization: Bearer {{token}}
+
+### 4. Ver quinielas disponibles
+GET {{baseUrl}}/api/jugador/quinielas
+Authorization: Bearer {{token}}
+
+
+### ─── ADMIN (ROLE_ADMIN) ────────────────────────────────────────────
+
+### 5. Listar todos los usuarios
+GET {{baseUrl}}/api/admin/usuarios
+Authorization: Bearer {{token}}
+
+### 6. Cambiar rol de usuario (id=1)
+PUT {{baseUrl}}/api/admin/usuarios/1/rol
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "role": "ADMIN"
+}
+
+
+### ─── CONTROL DE ACCESO ──────────────────────────────────────────────
+
+### 7. Jugador intenta acceder a admin → 403
+GET {{baseUrl}}/api/admin/usuarios
+Authorization: Bearer {{token}}
+
+### 8. Sin token → 401
+GET {{baseUrl}}/api/jugador/perfil
+
+### 9. Endpoint público (sin token)
+GET {{baseUrl}}/api/test/publico
+
+### 10. Health check
+GET {{baseUrl}}/api/test/health

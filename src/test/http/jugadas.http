@@ -1,0 +1,369 @@
+### ─────────────────────────────────────────────────────────────────────────
+### VARIABLES
+### Ajusta los tokens tras el login.
+### Los IDs del catalogo son los que siembra CatalogDataInitializer al arrancar.
+### ─────────────────────────────────────────────────────────────────────────
+@baseUrl      = http://localhost:8080
+@jugadorToken = <pega_aqui_el_token_del_jugador>
+@adminToken   = <pega_aqui_el_token_del_admin>
+
+### ════════════════════════════════════════════════════════════════════════
+###  IDs SEMBRADOS POR EL CATALOGO (CatalogDataInitializer)
+###  TipoPronostico:
+###    1 = RESULTADO  | opciones: 1=LOCAL_WIN  2=DRAW  3=AWAY_WIN
+###    2 = GOLES      | opciones: 4=G_0_1  5=G_2_3  6=G_4_5  7=G_6_M
+###    3 = BTTS       | opciones: 8=BTTS_SI  9=BTTS_NO
+###    4 = CORNERS    | opciones: 10=C_0_5  11=C_6_9  12=C_10_M
+### ════════════════════════════════════════════════════════════════════════
+
+### ════════════════════════════════════════════════════════════════════════
+###  PASO PREVIO: Registrar jugador y obtener token
+### ════════════════════════════════════════════════════════════════════════
+
+### A. Registrar jugador
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "username": "jugador1",
+  "email": "jugador1@quinielascanario.com",
+  "password": "Jugador2026!"
+}
+
+###
+### B. Login jugador -> copiar token en @jugadorToken
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "jugador1",
+  "password": "Jugador2026!"
+}
+
+###
+### C. (Admin) Confirmar que la quiniela esta en estado ABIERTA
+###    Si no, cambiarla con: PATCH /api/admin/quinielas/1/estado {"estado":"ABIERTA"}
+GET {{baseUrl}}/api/admin/quinielas/1
+Authorization: Bearer {{adminToken}}
+
+
+### ════════════════════════════════════════════════════════════════════════
+###  JUGADAS
+### ════════════════════════════════════════════════════════════════════════
+
+### 1. Crear Jugada (ticket 1 para la quiniela 1)
+POST {{baseUrl}}/api/jugador/jugadas
+Authorization: Bearer {{jugadorToken}}
+Content-Type: application/json
+
+{
+  "quinielaId": 1
+}
+
+###
+### 2. Crear segundo ticket para la misma quiniela (multiples tickets permitidos)
+POST {{baseUrl}}/api/jugador/jugadas
+Authorization: Bearer {{jugadorToken}}
+Content-Type: application/json
+
+{
+  "quinielaId": 1
+}
+
+###
+### 3. Listar mis jugadas
+GET {{baseUrl}}/api/jugador/jugadas
+Authorization: Bearer {{jugadorToken}}
+
+###
+### 4. Ver detalle de la jugada id=1 (con pronosticos)
+GET {{baseUrl}}/api/jugador/jugadas/1
+Authorization: Bearer {{jugadorToken}}
+
+###
+### 5. [ERROR] Crear jugada en quiniela CERRADA/CREADA/EN_JUEGO -> 409
+POST {{baseUrl}}/api/jugador/jugadas
+Authorization: Bearer {{jugadorToken}}
+Content-Type: application/json
+
+{
+  "quinielaId": 2
+}
+
+###
+### 6. [ERROR] Acceder a jugada de otro usuario -> 409
+GET {{baseUrl}}/api/jugador/jugadas/999
+Authorization: Bearer {{jugadorToken}}
+
+
+### ════════════════════════════════════════════════════════════════════════
+###  PRONOSTICOS JUGADA 1 - PARTIDO 1 (America vs Chivas)
+###  Se pueden registrar hasta 4 pronosticos por partido (uno por tipo)
+### ════════════════════════════════════════════════════════════════════════
+
+### 7. Partido 1 - Tipo RESULTADO: America gana (LOCAL_WIN)
+POST {{baseUrl}}/api/jugador/jugadas/1/pronosticos
+Authorization: Bearer {{jugadorToken}}
+Content-Type: application/json
+
+{
+  "partidoId": 1,
+  "tipoPronosticoId": 1,
+  "opcionPronosticoId": 1
+}
+
+###
+### 8. Partido 1 - Tipo GOLES: 2-3 goles (G_2_3)
+POST {{baseUrl}}/api/jugador/jugadas/1/pronosticos
+Authorization: Bearer {{jugadorToken}}
+Content-Type: application/json
+
+{
+  "partidoId": 1,
+  "tipoPronosticoId": 2,
+  "opcionPronosticoId": 5
+}
+
+###
+### 9. Partido 1 - Tipo BTTS: si ambos marcan (BTTS_SI)
+POST {{baseUrl}}/api/jugador/jugadas/1/pronosticos
+Authorization: Bearer {{jugadorToken}}
+Content-Type: application/json
+
+{
+  "partidoId": 1,
+  "tipoPronosticoId": 3,
+  "opcionPronosticoId": 8
+}
+
+###
+### 10. Partido 1 - Tipo CORNERS: 6-9 corners (C_6_9)
+POST {{baseUrl}}/api/jugador/jugadas/1/pronosticos
+Authorization: Bearer {{jugadorToken}}
+Content-Type: application/json
+
+{
+  "partidoId": 1,
+  "tipoPronosticoId": 4,
+  "opcionPronosticoId": 11
+}
+
+### ════════════════════════════════════════════════════════════════════════
+###  PRONOSTICOS JUGADA 1 - PARTIDO 2 (Cruz Azul vs Pumas)
+### ════════════════════════════════════════════════════════════════════════
+
+### 11. Partido 2 - Tipo RESULTADO: Empate (DRAW)
+POST {{baseUrl}}/api/jugador/jugadas/1/pronosticos
+Authorization: Bearer {{jugadorToken}}
+Content-Type: application/json
+
+{
+  "partidoId": 2,
+  "tipoPronosticoId": 1,
+  "opcionPronosticoId": 2
+}
+
+###
+### 12. Partido 2 - Tipo GOLES: 0-1 goles (G_0_1)
+POST {{baseUrl}}/api/jugador/jugadas/1/pronosticos
+Authorization: Bearer {{jugadorToken}}
+Content-Type: application/json
+
+{
+  "partidoId": 2,
+  "tipoPronosticoId": 2,
+  "opcionPronosticoId": 4
+}
+
+###
+### 13. Partido 2 - Tipo BTTS: no ambos marcan (BTTS_NO)
+POST {{baseUrl}}/api/jugador/jugadas/1/pronosticos
+Authorization: Bearer {{jugadorToken}}
+Content-Type: application/json
+
+{
+  "partidoId": 2,
+  "tipoPronosticoId": 3,
+  "opcionPronosticoId": 9
+}
+
+###
+### 14. Partido 2 - Tipo CORNERS: 0-5 corners (C_0_5)
+POST {{baseUrl}}/api/jugador/jugadas/1/pronosticos
+Authorization: Bearer {{jugadorToken}}
+Content-Type: application/json
+
+{
+  "partidoId": 2,
+  "tipoPronosticoId": 4,
+  "opcionPronosticoId": 10
+}
+
+### ════════════════════════════════════════════════════════════════════════
+###  PRONOSTICOS JUGADA 1 - PARTIDOS 3 al 8 (un pronostico por partido)
+### ════════════════════════════════════════════════════════════════════════
+
+### 15. Partido 3 (Tigres vs Monterrey) - Tipo RESULTADO: Visitante gana (AWAY_WIN)
+POST {{baseUrl}}/api/jugador/jugadas/1/pronosticos
+Authorization: Bearer {{jugadorToken}}
+Content-Type: application/json
+
+{
+  "partidoId": 3,
+  "tipoPronosticoId": 1,
+  "opcionPronosticoId": 3
+}
+
+###
+### 16. Partido 4 (Santos vs Toluca) - Tipo RESULTADO: Local gana
+POST {{baseUrl}}/api/jugador/jugadas/1/pronosticos
+Authorization: Bearer {{jugadorToken}}
+Content-Type: application/json
+
+{
+  "partidoId": 4,
+  "tipoPronosticoId": 1,
+  "opcionPronosticoId": 1
+}
+
+###
+### 17. Partido 5 (Atlas vs Leon) - Tipo GOLES: 4-5 goles (G_4_5)
+POST {{baseUrl}}/api/jugador/jugadas/1/pronosticos
+Authorization: Bearer {{jugadorToken}}
+Content-Type: application/json
+
+{
+  "partidoId": 5,
+  "tipoPronosticoId": 2,
+  "opcionPronosticoId": 6
+}
+
+###
+### 18. Partido 6 (Puebla vs Necaxa) - Tipo BTTS: si ambos marcan
+POST {{baseUrl}}/api/jugador/jugadas/1/pronosticos
+Authorization: Bearer {{jugadorToken}}
+Content-Type: application/json
+
+{
+  "partidoId": 6,
+  "tipoPronosticoId": 3,
+  "opcionPronosticoId": 8
+}
+
+###
+### 19. Partido 7 (Mazatlan vs FC Juarez) - Tipo CORNERS: 10+ (C_10_M)
+POST {{baseUrl}}/api/jugador/jugadas/1/pronosticos
+Authorization: Bearer {{jugadorToken}}
+Content-Type: application/json
+
+{
+  "partidoId": 7,
+  "tipoPronosticoId": 4,
+  "opcionPronosticoId": 12
+}
+
+###
+### 20. Partido 8 (Guadalajara vs Queretaro) - Tipo RESULTADO: Empate (DRAW)
+POST {{baseUrl}}/api/jugador/jugadas/1/pronosticos
+Authorization: Bearer {{jugadorToken}}
+Content-Type: application/json
+
+{
+  "partidoId": 8,
+  "tipoPronosticoId": 1,
+  "opcionPronosticoId": 2
+}
+
+###
+### 21. Ver detalle de la jugada 1 con todos los pronosticos registrados
+GET {{baseUrl}}/api/jugador/jugadas/1
+Authorization: Bearer {{jugadorToken}}
+
+###
+### 22. Listar pronosticos de la jugada 1
+GET {{baseUrl}}/api/jugador/jugadas/1/pronosticos
+Authorization: Bearer {{jugadorToken}}
+
+
+### ════════════════════════════════════════════════════════════════════════
+###  VALIDACIONES DE ERROR
+### ════════════════════════════════════════════════════════════════════════
+
+### 23. [ERROR] Pronostico duplicado: mismo tipo en mismo partido -> 409
+POST {{baseUrl}}/api/jugador/jugadas/1/pronosticos
+Authorization: Bearer {{jugadorToken}}
+Content-Type: application/json
+
+{
+  "partidoId": 1,
+  "tipoPronosticoId": 1,
+  "opcionPronosticoId": 3
+}
+
+###
+### 24. [ERROR] Partido que no pertenece a la quiniela -> 409
+POST {{baseUrl}}/api/jugador/jugadas/1/pronosticos
+Authorization: Bearer {{jugadorToken}}
+Content-Type: application/json
+
+{
+  "partidoId": 999,
+  "tipoPronosticoId": 1,
+  "opcionPronosticoId": 1
+}
+
+###
+### 25. [ERROR] Opcion que no pertenece al tipo indicado -> 409
+###     (opcionPronosticoId=8 es BTTS_SI que pertenece a tipo 3, no al tipo 1)
+POST {{baseUrl}}/api/jugador/jugadas/1/pronosticos
+Authorization: Bearer {{jugadorToken}}
+Content-Type: application/json
+
+{
+  "partidoId": 3,
+  "tipoPronosticoId": 1,
+  "opcionPronosticoId": 8
+}
+
+###
+### 26. [ERROR] Sin token JWT -> 401
+POST {{baseUrl}}/api/jugador/jugadas
+Content-Type: application/json
+
+{
+  "quinielaId": 1
+}
+
+###
+### ════════════════════════════════════════════════════════════════════════
+###  TICKET 2 - Pronosticos alternativos para la misma quiniela
+### ════════════════════════════════════════════════════════════════════════
+
+### 27. Partido 1 - Tipo RESULTADO en ticket 2: Visitante gana (AWAY_WIN)
+POST {{baseUrl}}/api/jugador/jugadas/2/pronosticos
+Authorization: Bearer {{jugadorToken}}
+Content-Type: application/json
+
+{
+  "partidoId": 1,
+  "tipoPronosticoId": 1,
+  "opcionPronosticoId": 3
+}
+
+###
+### 28. Partido 1 - Tipo GOLES en ticket 2: 6+ goles (G_6_M)
+POST {{baseUrl}}/api/jugador/jugadas/2/pronosticos
+Authorization: Bearer {{jugadorToken}}
+Content-Type: application/json
+
+{
+  "partidoId": 1,
+  "tipoPronosticoId": 2,
+  "opcionPronosticoId": 7
+}
+
+###
+### 29. Ver detalle del ticket 2 con sus pronosticos
+GET {{baseUrl}}/api/jugador/jugadas/2
+Authorization: Bearer {{jugadorToken}}
+

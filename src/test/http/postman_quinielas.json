@@ -1,0 +1,485 @@
+{
+  "info": {
+    "name": "Quinielas API - Quinielas & Partidos",
+    "_postman_id": "quinielas-admin-collection",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl",    "value": "http://localhost:8080" },
+    { "key": "token",      "value": "" },
+    { "key": "quinielaId", "value": "1" },
+    { "key": "partidoId",  "value": "1" }
+  ],
+  "item": [
+
+    {
+      "name": "── AUTH ──────────────────────────────",
+      "item": [
+        {
+          "name": "A. Registrar admin",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/auth/register", "host": ["{{baseUrl}}"], "path": ["api","auth","register"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admincanario\",\n  \"email\": \"admin@quinielascanario.com\",\n  \"password\": \"Admin2026!\"\n}"
+            }
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "const t = pm.response.json().token;",
+            "if (t) { pm.collectionVariables.set('token', t); console.log('Token guardado'); }"
+          ]}}]
+        },
+        {
+          "name": "B. Login admin → guarda token",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api","auth","login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admincanario\",\n  \"password\": \"Admin2026!\"\n}"
+            }
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "pm.test('Tiene token', () => pm.expect(pm.response.json().token).to.be.a('string'));",
+            "const t = pm.response.json().token;",
+            "if (t) { pm.collectionVariables.set('token', t); console.log('Token guardado:', t.substring(0,20)+'...'); }"
+          ]}}]
+        }
+      ]
+    },
+
+    {
+      "name": "── QUINIELAS ─────────────────────────",
+      "item": [
+        {
+          "name": "1. Crear Quiniela Jornada 1",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/admin/quinielas", "host": ["{{baseUrl}}"], "path": ["api","admin","quinielas"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Quiniela Jornada 1 - Liga MX 2026\",\n  \"descripcion\": \"Pronósticos de la primera jornada del Torneo Apertura 2026\",\n  \"costo\": 50.00,\n  \"fechaInicio\": \"2026-04-10T00:00:00\",\n  \"fechaCierre\": \"2026-04-17T20:00:00\"\n}"
+            }
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 201', () => pm.response.to.have.status(201));",
+            "pm.test('Estado CREADA', () => pm.expect(pm.response.json().estado).to.eql('CREADA'));",
+            "const id = pm.response.json().id;",
+            "if (id) { pm.collectionVariables.set('quinielaId', id); console.log('quinielaId =', id); }"
+          ]}}]
+        },
+        {
+          "name": "2. Crear Quiniela Champions League",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/admin/quinielas", "host": ["{{baseUrl}}"], "path": ["api","admin","quinielas"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Final Champions League 2026\",\n  \"descripcion\": \"Gran final de la UEFA Champions League\",\n  \"costo\": 100.00,\n  \"fechaInicio\": \"2026-04-15T00:00:00\",\n  \"fechaCierre\": \"2026-05-30T18:00:00\"\n}"
+            }
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 201', () => pm.response.to.have.status(201));"
+          ]}}]
+        },
+        {
+          "name": "3. Listar quinielas",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/api/admin/quinielas", "host": ["{{baseUrl}}"], "path": ["api","admin","quinielas"] }
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "pm.test('Es array', () => pm.expect(pm.response.json()).to.be.an('array'));"
+          ]}}]
+        },
+        {
+          "name": "4. Detalle quiniela (con partidos)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/api/admin/quinielas/{{quinielaId}}", "host": ["{{baseUrl}}"], "path": ["api","admin","quinielas","{{quinielaId}}"] }
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "pm.test('Tiene campo partidos', () => pm.expect(pm.response.json()).to.have.property('partidos'));"
+          ]}}]
+        },
+        {
+          "name": "5. Cambiar estado → ABIERTA",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/admin/quinielas/{{quinielaId}}/estado", "host": ["{{baseUrl}}"], "path": ["api","admin","quinielas","{{quinielaId}}","estado"] },
+            "body": { "mode": "raw", "raw": "{\n  \"estado\": \"ABIERTA\"\n}" }
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "pm.test('Estado ABIERTA', () => pm.expect(pm.response.json().estado).to.eql('ABIERTA'));"
+          ]}}]
+        },
+        {
+          "name": "6. Cambiar estado → EN_JUEGO",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/admin/quinielas/{{quinielaId}}/estado", "host": ["{{baseUrl}}"], "path": ["api","admin","quinielas","{{quinielaId}}","estado"] },
+            "body": { "mode": "raw", "raw": "{\n  \"estado\": \"EN_JUEGO\"\n}" }
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Estado EN_JUEGO', () => pm.expect(pm.response.json().estado).to.eql('EN_JUEGO'));"
+          ]}}]
+        },
+        {
+          "name": "7. Cambiar estado → FINALIZADA",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/admin/quinielas/{{quinielaId}}/estado", "host": ["{{baseUrl}}"], "path": ["api","admin","quinielas","{{quinielaId}}","estado"] },
+            "body": { "mode": "raw", "raw": "{\n  \"estado\": \"FINALIZADA\"\n}" }
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Estado FINALIZADA', () => pm.expect(pm.response.json().estado).to.eql('FINALIZADA'));"
+          ]}}]
+        },
+        {
+          "name": "8. [ERROR] Estado inválido → 409",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/admin/quinielas/{{quinielaId}}/estado", "host": ["{{baseUrl}}"], "path": ["api","admin","quinielas","{{quinielaId}}","estado"] },
+            "body": { "mode": "raw", "raw": "{\n  \"estado\": \"INEXISTENTE\"\n}" }
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 409', () => pm.response.to.have.status(409));"
+          ]}}]
+        },
+        {
+          "name": "9. [ERROR] Quiniela no existe → 404",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/api/admin/quinielas/9999", "host": ["{{baseUrl}}"], "path": ["api","admin","quinielas","9999"] }
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 404', () => pm.response.to.have.status(404));"
+          ]}}]
+        }
+      ]
+    },
+
+    {
+      "name": "── PARTIDOS ──────────────────────────",
+      "item": [
+        {
+          "name": "10. Agregar Partido 1 – America vs Chivas",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/admin/quinielas/{{quinielaId}}/partidos", "host": ["{{baseUrl}}"], "path": ["api","admin","quinielas","{{quinielaId}}","partidos"] },
+            "body": { "mode": "raw", "raw": "{\n  \"descripcion\": \"Clasico Nacional\",\n  \"equipoLocal\": \"America\",\n  \"equipoVisitante\": \"Chivas\",\n  \"fechaPartido\": \"2026-04-18T20:00:00\"\n}" }
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 201', () => pm.response.to.have.status(201));",
+            "const id = pm.response.json().id;",
+            "if (id) { pm.collectionVariables.set('partidoId', id); console.log('partidoId =', id); }"
+          ]}}]
+        },
+        {
+          "name": "11. Agregar Partido 2 – Cruz Azul vs Pumas",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/admin/quinielas/{{quinielaId}}/partidos", "host": ["{{baseUrl}}"], "path": ["api","admin","quinielas","{{quinielaId}}","partidos"] },
+            "body": { "mode": "raw", "raw": "{\n  \"descripcion\": \"Clasico Capitalino\",\n  \"equipoLocal\": \"Cruz Azul\",\n  \"equipoVisitante\": \"Pumas UNAM\",\n  \"fechaPartido\": \"2026-04-19T18:00:00\"\n}" }
+          },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 201', () => pm.response.to.have.status(201));"]}}]
+        },
+        {
+          "name": "12. Agregar Partido 3 – Tigres vs Monterrey",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/admin/quinielas/{{quinielaId}}/partidos", "host": ["{{baseUrl}}"], "path": ["api","admin","quinielas","{{quinielaId}}","partidos"] },
+            "body": { "mode": "raw", "raw": "{\n  \"descripcion\": \"Clasico Regio\",\n  \"equipoLocal\": \"Tigres UANL\",\n  \"equipoVisitante\": \"Monterrey\",\n  \"fechaPartido\": \"2026-04-19T20:00:00\"\n}" }
+          },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 201', () => pm.response.to.have.status(201));"]}}]
+        },
+        {
+          "name": "13. Agregar Partido 4 – Santos vs Toluca",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/admin/quinielas/{{quinielaId}}/partidos", "host": ["{{baseUrl}}"], "path": ["api","admin","quinielas","{{quinielaId}}","partidos"] },
+            "body": { "mode": "raw", "raw": "{\n  \"equipoLocal\": \"Santos Laguna\",\n  \"equipoVisitante\": \"Toluca\",\n  \"fechaPartido\": \"2026-04-20T18:00:00\"\n}" }
+          },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 201', () => pm.response.to.have.status(201));"]}}]
+        },
+        {
+          "name": "14. Agregar Partido 5 – Atlas vs Leon",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/admin/quinielas/{{quinielaId}}/partidos", "host": ["{{baseUrl}}"], "path": ["api","admin","quinielas","{{quinielaId}}","partidos"] },
+            "body": { "mode": "raw", "raw": "{\n  \"equipoLocal\": \"Atlas\",\n  \"equipoVisitante\": \"Leon\",\n  \"fechaPartido\": \"2026-04-20T20:00:00\"\n}" }
+          },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 201', () => pm.response.to.have.status(201));"]}}]
+        },
+        {
+          "name": "15. Agregar Partido 6 – Puebla vs Necaxa",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/admin/quinielas/{{quinielaId}}/partidos", "host": ["{{baseUrl}}"], "path": ["api","admin","quinielas","{{quinielaId}}","partidos"] },
+            "body": { "mode": "raw", "raw": "{\n  \"equipoLocal\": \"Puebla\",\n  \"equipoVisitante\": \"Necaxa\",\n  \"fechaPartido\": \"2026-04-21T18:00:00\"\n}" }
+          },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 201', () => pm.response.to.have.status(201));"]}}]
+        },
+        {
+          "name": "16. Agregar Partido 7 – Mazatlan vs FC Juarez",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/admin/quinielas/{{quinielaId}}/partidos", "host": ["{{baseUrl}}"], "path": ["api","admin","quinielas","{{quinielaId}}","partidos"] },
+            "body": { "mode": "raw", "raw": "{\n  \"equipoLocal\": \"Mazatlan FC\",\n  \"equipoVisitante\": \"FC Juarez\",\n  \"fechaPartido\": \"2026-04-21T20:00:00\"\n}" }
+          },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 201', () => pm.response.to.have.status(201));"]}}]
+        },
+        {
+          "name": "17. Agregar Partido 8 – Guadalajara vs Queretaro (completa la quiniela)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/admin/quinielas/{{quinielaId}}/partidos", "host": ["{{baseUrl}}"], "path": ["api","admin","quinielas","{{quinielaId}}","partidos"] },
+            "body": { "mode": "raw", "raw": "{\n  \"equipoLocal\": \"Guadalajara\",\n  \"equipoVisitante\": \"Queretaro\",\n  \"fechaPartido\": \"2026-04-22T20:00:00\"\n}" }
+          },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 201', () => pm.response.to.have.status(201));"]}}]
+        },
+        {
+          "name": "18. [ERROR] 9no partido - maximo excedido - 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/admin/quinielas/{{quinielaId}}/partidos", "host": ["{{baseUrl}}"], "path": ["api","admin","quinielas","{{quinielaId}}","partidos"] },
+            "body": { "mode": "raw", "raw": "{\n  \"equipoLocal\": \"Atlante\",\n  \"equipoVisitante\": \"Tampico\",\n  \"fechaPartido\": \"2026-04-23T20:00:00\"\n}" }
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 409 max excedido', () => pm.response.to.have.status(409));",
+            "pm.test('Mensaje max partidos', () => pm.expect(pm.response.json().error).to.include('ximo'));"
+          ]}}]
+        },
+        {
+          "name": "19. [ERROR] Fecha dentro del periodo de la quiniela - 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/admin/quinielas/{{quinielaId}}/partidos", "host": ["{{baseUrl}}"], "path": ["api","admin","quinielas","{{quinielaId}}","partidos"] },
+            "body": { "mode": "raw", "raw": "{\n  \"equipoLocal\": \"Necaxa\",\n  \"equipoVisitante\": \"Atletico San Luis\",\n  \"fechaPartido\": \"2026-04-15T18:00:00\"\n}" }
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 409 fecha invalida', () => pm.response.to.have.status(409));",
+            "pm.test('Mensaje fecha minima', () => pm.expect(pm.response.json().error).to.include('un'));"
+          ]}}]
+        },
+        {
+          "name": "20. [ERROR] Fecha exactamente en el cierre - 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/admin/quinielas/{{quinielaId}}/partidos", "host": ["{{baseUrl}}"], "path": ["api","admin","quinielas","{{quinielaId}}","partidos"] },
+            "body": { "mode": "raw", "raw": "{\n  \"equipoLocal\": \"Veracruz\",\n  \"equipoVisitante\": \"Zacatepec\",\n  \"fechaPartido\": \"2026-04-17T20:00:00\"\n}" }
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 409 cierre exacto invalido', () => pm.response.to.have.status(409));"
+          ]}}]
+        },
+        {
+          "name": "21. [ERROR] Quiniela en estado distinto a CREADA - 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/admin/quinielas/2/partidos", "host": ["{{baseUrl}}"], "path": ["api","admin","quinielas","2","partidos"] },
+            "body": { "mode": "raw", "raw": "{\n  \"equipoLocal\": \"Real Madrid\",\n  \"equipoVisitante\": \"Bayern Munich\",\n  \"fechaPartido\": \"2026-05-31T20:00:00\"\n}" }
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 409 estado invalido', () => pm.response.to.have.status(409));"
+          ]}}]
+        },
+        {
+          "name": "22. Listar partidos de la quiniela",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/api/admin/quinielas/{{quinielaId}}/partidos", "host": ["{{baseUrl}}"], "path": ["api","admin","quinielas","{{quinielaId}}","partidos"] }
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "pm.test('Exactamente 8 partidos', () => pm.expect(pm.response.json()).to.have.lengthOf(8));"
+          ]}}]
+        }
+      ]
+    },
+
+    {
+      "name": "── RESULTADOS ────────────────────────",
+      "item": [
+        {
+          "name": "21. Actualizar resultado completo (partido {{partidoId}})",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/admin/partidos/{{partidoId}}/resultados", "host": ["{{baseUrl}}"], "path": ["api","admin","partidos","{{partidoId}}","resultados"] },
+            "body": { "mode": "raw", "raw": "{\n  \"marcadorLocal\": 2,\n  \"marcadorVisitante\": 1,\n  \"totalCorners\": 8,\n  \"ambosMarcan\": true\n}" }
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "pm.test('Marcador local = 2', () => pm.expect(pm.response.json().marcadorLocal).to.eql(2));",
+            "pm.test('Marcador visitante = 1', () => pm.expect(pm.response.json().marcadorVisitante).to.eql(1));"
+          ]}}]
+        },
+        {
+          "name": "22. Actualizar solo marcadores (parcial)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/admin/partidos/{{partidoId}}/resultados", "host": ["{{baseUrl}}"], "path": ["api","admin","partidos","{{partidoId}}","resultados"] },
+            "body": { "mode": "raw", "raw": "{\n  \"marcadorLocal\": 0,\n  \"marcadorVisitante\": 0\n}" }
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "pm.test('Empate 0-0', () => {\n  const r = pm.response.json();\n  pm.expect(r.marcadorLocal).to.eql(0);\n  pm.expect(r.marcadorVisitante).to.eql(0);\n});"
+          ]}}]
+        },
+        {
+          "name": "23. Actualizar solo corners y ambosMarcan",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/admin/partidos/{{partidoId}}/resultados", "host": ["{{baseUrl}}"], "path": ["api","admin","partidos","{{partidoId}}","resultados"] },
+            "body": { "mode": "raw", "raw": "{\n  \"totalCorners\": 11,\n  \"ambosMarcan\": false\n}" }
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "pm.test('Corners = 11', () => pm.expect(pm.response.json().totalCorners).to.eql(11));"
+          ]}}]
+        },
+        {
+          "name": "24. [ERROR] Partido no existe → 404",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/admin/partidos/9999/resultados", "host": ["{{baseUrl}}"], "path": ["api","admin","partidos","9999","resultados"] },
+            "body": { "mode": "raw", "raw": "{\n  \"marcadorLocal\": 1,\n  \"marcadorVisitante\": 0\n}" }
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 404', () => pm.response.to.have.status(404));"
+          ]}}]
+        }
+      ]
+    },
+
+    {
+      "name": "── CONTROL DE ACCESO ─────────────────",
+      "item": [
+        {
+          "name": "25. [ERROR] Sin token → 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/admin/quinielas", "host": ["{{baseUrl}}"], "path": ["api","admin","quinielas"] }
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 401 sin token', () => pm.response.to.have.status(401));"
+          ]}}]
+        },
+        {
+          "name": "26. [ERROR] Token de USER sin rol ADMIN → 403",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer token_de_usuario_normal_aqui" }],
+            "url": { "raw": "{{baseUrl}}/api/admin/quinielas", "host": ["{{baseUrl}}"], "path": ["api","admin","quinielas"] }
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 403 sin permiso ADMIN', () => pm.response.to.have.status(403));"
+          ]}}]
+        }
+      ]
+    }
+
+  ]
+}
+

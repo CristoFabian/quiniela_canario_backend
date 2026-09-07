@@ -1,0 +1,125 @@
+{
+  "info": {
+    "name": "Quinielas API - JWT Auth",
+    "_postman_id": "quinielas-jwt-collection",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "token",   "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1. Registro",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/api/auth/register", "host": ["{{baseUrl}}"], "path": ["api","auth","register"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"juanito\",\n  \"email\": \"juanito@mail.com\",\n  \"password\": \"secret123\"\n}"
+        }
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "pm.test('Tiene token', () => pm.expect(pm.response.json().token).to.be.a('string'));",
+            "const token = pm.response.json().token;",
+            "if (token) { pm.collectionVariables.set('token', token); console.log('Token guardado:', token); }"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "2. Login",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api","auth","login"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"juanito\",\n  \"password\": \"secret123\"\n}"
+        }
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "pm.test('Tiene token', () => pm.expect(pm.response.json().token).to.be.a('string'));",
+            "const token = pm.response.json().token;",
+            "if (token) { pm.collectionVariables.set('token', token); console.log('Token guardado:', token); }"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "3. Endpoint privado (con token)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": { "raw": "{{baseUrl}}/api/test/privado", "host": ["{{baseUrl}}"], "path": ["api","test","privado"] }
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "pm.test('Acceso autorizado', () => pm.expect(pm.response.json().mensaje).to.include('autorizado'));"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "4. Endpoint privado (sin token → 403)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/api/test/privado", "host": ["{{baseUrl}}"], "path": ["api","test","privado"] }
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('Status 403 sin token', () => pm.response.to.have.status(403));"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "5. Endpoint privado (token inválido → 403)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer tokenbasura123" }],
+        "url": { "raw": "{{baseUrl}}/api/test/privado", "host": ["{{baseUrl}}"], "path": ["api","test","privado"] }
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('Status 403 token inválido', () => pm.response.to.have.status(403));"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "6. Endpoint público (sin token → 200)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/api/test/publico", "host": ["{{baseUrl}}"], "path": ["api","test","publico"] }
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('Status 200 público', () => pm.response.to.have.status(200));"
+          ]
+        }
+      }]
+    }
+  ]
+}
+

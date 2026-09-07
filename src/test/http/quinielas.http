@@ -1,0 +1,318 @@
+### ─────────────────────────────────────────────────────────────────────────
+### VARIABLES  –  ajusta el token tras hacer login como ADMIN
+### ─────────────────────────────────────────────────────────────────────────
+@baseUrl    = http://localhost:8080
+@adminToken = <pega_aqui_el_token_de_admin>
+
+### ════════════════════════════════════════════════════════════════════════
+###  PASO PREVIO: Registrar admin y obtener token
+### ════════════════════════════════════════════════════════════════════════
+
+### A. Registrar usuario admin (la primera vez)
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "username": "admincanario",
+  "email": "admin@quinielascanario.com",
+  "password": "Admin2026!"
+}
+
+### B. Login como admin → copia el "token" en @adminToken
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "admincanario",
+  "password": "Admin2026!"
+}
+
+### NOTA: Si el usuario fue creado con rol USER, sube su rol con:
+###   PUT /api/admin/usuarios/1/rol   body: { "role": "ADMIN" }
+###   (usando el token de otro admin ya existente)
+
+
+### ════════════════════════════════════════════════════════════════════════
+###  QUINIELAS  –  CRUD
+### ════════════════════════════════════════════════════════════════════════
+
+### 1. Crear Quiniela – Jornada 1 Liga MX
+POST {{baseUrl}}/api/admin/quinielas
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "nombre": "Quiniela Jornada 1 - Liga MX 2026",
+  "descripcion": "Pronósticos de la primera jornada del Torneo Apertura 2026",
+  "costo": 50.00,
+  "fechaInicio": "2026-04-10T00:00:00",
+  "fechaCierre": "2026-04-17T20:00:00"
+}
+
+###
+### 2. Crear Quiniela – Champions League Final
+POST {{baseUrl}}/api/admin/quinielas
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "nombre": "Final Champions League 2026",
+  "descripcion": "Gran final de la UEFA Champions League",
+  "costo": 100.00,
+  "fechaInicio": "2026-04-15T00:00:00",
+  "fechaCierre": "2026-05-30T18:00:00"
+}
+
+###
+### 3. Listar todas las quinielas
+GET {{baseUrl}}/api/admin/quinielas
+Authorization: Bearer {{adminToken}}
+
+###
+### 4. Obtener detalle de la quiniela id=1 (incluye partidos)
+GET {{baseUrl}}/api/admin/quinielas/1
+Authorization: Bearer {{adminToken}}
+
+###
+### 5. Actualizar estado → ABIERTA
+PATCH {{baseUrl}}/api/admin/quinielas/1/estado
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "estado": "ABIERTA"
+}
+
+###
+### 6. Actualizar estado → EN_JUEGO
+PATCH {{baseUrl}}/api/admin/quinielas/1/estado
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "estado": "EN_JUEGO"
+}
+
+###
+### 7. Actualizar estado → FINALIZADA
+PATCH {{baseUrl}}/api/admin/quinielas/1/estado
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "estado": "FINALIZADA"
+}
+
+###
+### 8. Error: estado inválido → 409
+PATCH {{baseUrl}}/api/admin/quinielas/1/estado
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "estado": "INEXISTENTE"
+}
+
+###
+### 9. Error: quiniela no existe → 404
+GET {{baseUrl}}/api/admin/quinielas/9999
+Authorization: Bearer {{adminToken}}
+
+
+### ════════════════════════════════════════════════════════════════════════
+###  PARTIDOS  –  Agregar a la Quiniela 1 (debe estar en estado CREADA)
+###  NOTA: re-crear la quiniela o crear una nueva si ya cambió su estado
+### ════════════════════════════════════════════════════════════════════════
+
+### 10. Partido 1 – América vs Chivas
+POST {{baseUrl}}/api/admin/quinielas/1/partidos
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "descripcion": "Clásico Nacional",
+  "equipoLocal": "América",
+  "equipoVisitante": "Chivas",
+  "fechaPartido": "2026-04-12T20:00:00"
+}
+
+###
+### 11. Partido 2 – Cruz Azul vs Pumas
+POST {{baseUrl}}/api/admin/quinielas/1/partidos
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "descripcion": "Clásico Capitalino",
+  "equipoLocal": "Cruz Azul",
+  "equipoVisitante": "Pumas UNAM",
+  "fechaPartido": "2026-04-12T18:00:00"
+}
+
+###
+### 12. Partido 3 – Tigres vs Monterrey
+POST {{baseUrl}}/api/admin/quinielas/1/partidos
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "descripcion": "Clásico Regio",
+  "equipoLocal": "Tigres UANL",
+  "equipoVisitante": "Monterrey",
+  "fechaPartido": "2026-04-13T17:00:00"
+}
+
+###
+### 13. Partido 4 – Santos vs Toluca
+POST {{baseUrl}}/api/admin/quinielas/1/partidos
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "equipoLocal": "Santos Laguna",
+  "equipoVisitante": "Toluca",
+  "fechaPartido": "2026-04-13T20:00:00"
+}
+
+###
+### 14. Partido 5 – Atlas vs León
+POST {{baseUrl}}/api/admin/quinielas/1/partidos
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "equipoLocal": "Atlas",
+  "equipoVisitante": "León",
+  "fechaPartido": "2026-04-14T19:00:00"
+}
+
+###
+### 15. Partido 6 – Puebla vs Necaxa
+POST {{baseUrl}}/api/admin/quinielas/1/partidos
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "equipoLocal": "Puebla",
+  "equipoVisitante": "Necaxa",
+  "fechaPartido": "2026-04-14T21:00:00"
+}
+
+###
+### 16. Partido 7 – Mazatlán vs FC Juárez
+POST {{baseUrl}}/api/admin/quinielas/1/partidos
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "equipoLocal": "Mazatlán FC",
+  "equipoVisitante": "FC Juárez",
+  "fechaPartido": "2026-04-15T20:00:00"
+}
+
+###
+### 17. Partido 8 – Guadalajara vs Querétaro (8vo → llena la quiniela)
+POST {{baseUrl}}/api/admin/quinielas/1/partidos
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "equipoLocal": "Guadalajara",
+  "equipoVisitante": "Querétaro",
+  "fechaPartido": "2026-04-15T22:00:00"
+}
+
+###
+### 18. Error: 9no partido → máximo excedido → 409
+POST {{baseUrl}}/api/admin/quinielas/1/partidos
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "equipoLocal": "Atlante",
+  "equipoVisitante": "Tampico",
+  "fechaPartido": "2026-04-16T20:00:00"
+}
+
+###
+### 19. Error: agregar partido a quiniela en estado ABIERTA → 409
+###     (Cambiar el estado de la quiniela 2 a ABIERTA y luego intentar agregar)
+POST {{baseUrl}}/api/admin/quinielas/2/partidos
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "equipoLocal": "Real Madrid",
+  "equipoVisitante": "Bayern Munich",
+  "fechaPartido": "2026-05-31T20:00:00"
+}
+
+###
+### 20. Listar partidos de la quiniela 1
+GET {{baseUrl}}/api/admin/quinielas/1/partidos
+Authorization: Bearer {{adminToken}}
+
+
+### ════════════════════════════════════════════════════════════════════════
+###  PARTIDOS  –  Actualizar resultados (id del partido)
+### ════════════════════════════════════════════════════════════════════════
+
+### 21. Actualizar resultado completo del partido id=1 (América 2 - 1 Chivas)
+PATCH {{baseUrl}}/api/admin/partidos/1/resultados
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "marcadorLocal": 2,
+  "marcadorVisitante": 1,
+  "totalCorners": 8,
+  "ambosMarcan": true
+}
+
+###
+### 22. Actualizar solo el marcador (parcial) del partido id=2
+PATCH {{baseUrl}}/api/admin/partidos/2/resultados
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "marcadorLocal": 0,
+  "marcadorVisitante": 0
+}
+
+###
+### 23. Actualizar solo corners y ambosMarcan del partido id=3
+PATCH {{baseUrl}}/api/admin/partidos/3/resultados
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "totalCorners": 11,
+  "ambosMarcan": false
+}
+
+###
+### 24. Error: partido no existe → 404
+PATCH {{baseUrl}}/api/admin/partidos/9999/resultados
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "marcadorLocal": 1,
+  "marcadorVisitante": 0
+}
+
+
+### ════════════════════════════════════════════════════════════════════════
+###  CONTROL DE ACCESO
+### ════════════════════════════════════════════════════════════════════════
+
+### 25. Sin token → 401
+GET {{baseUrl}}/api/admin/quinielas
+
+###
+### 26. Token de USER (sin rol ADMIN) → 403
+###     Registra/loguea con un usuario normal y pega su token aquí
+GET {{baseUrl}}/api/admin/quinielas
+Authorization: Bearer <token_de_usuario_normal>
+
