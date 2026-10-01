@@ -50,6 +50,21 @@ public class Quiniela {
             columnDefinition = "DATETIME DEFAULT CURRENT_TIMESTAMP")
     private LocalDateTime fechaCreacion;
 
+    /**
+     * Bolsa acumulada: suma de los montos de todos los pagos APROBADOS
+     * asociados a las jugadas que corresponden a esta quiniela.
+     * Se recalcula automáticamente cada vez que un pago cambia de estado.
+     */
+    @Column(name = "bolsa_acumulada", nullable = false, precision = 10, scale = 2)
+    private BigDecimal bolsaAcumulada = BigDecimal.ZERO;
+
+    /**
+     * true una vez que ya se notificó a los jugadores que esta quiniela está próxima
+     * a cerrar (falta ~1 día). Evita que la tarea programada envíe el aviso más de una vez.
+     */
+    @Column(name = "aviso_cierre_enviado", nullable = false)
+    private boolean avisoCierreEnviado = false;
+
     // ─── Relación 1:N con Partido ─────────────────────────────────────
     @OneToMany(mappedBy = "quiniela", cascade = CascadeType.ALL,
                orphanRemoval = true, fetch = FetchType.LAZY)
@@ -112,5 +127,11 @@ public class Quiniela {
 
     public LocalDateTime getFechaCreacion()          { return fechaCreacion; }
     public void setFechaCreacion(LocalDateTime fc)   { this.fechaCreacion = fc; }
+
+    public BigDecimal getBolsaAcumulada()                    { return bolsaAcumulada; }
+    public void setBolsaAcumulada(BigDecimal bolsaAcumulada) { this.bolsaAcumulada = bolsaAcumulada; }
+
+    public boolean isAvisoCierreEnviado()                    { return avisoCierreEnviado; }
+    public void setAvisoCierreEnviado(boolean avisoCierreEnviado) { this.avisoCierreEnviado = avisoCierreEnviado; }
 }
 

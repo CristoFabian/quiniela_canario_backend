@@ -4,6 +4,7 @@ import com.quinielas.del.canario.api.entity.Role;
 import com.quinielas.del.canario.api.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface UserRepository extends JpaRepository<User, Long> {
@@ -17,5 +18,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     /** Cuenta usuarios por rol y estado activo/inactivo. */
     long countByRoleAndActivo(Role role, boolean activo);
+
+    /** Usuarios activos de un rol (usado para notificaciones broadcast: todos los admins o todos los jugadores). */
+    List<User> findByRoleAndActivoTrue(Role role);
 }
 

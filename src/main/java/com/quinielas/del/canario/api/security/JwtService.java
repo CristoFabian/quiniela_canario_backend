@@ -35,10 +35,10 @@ public class JwtService {
 
     public String generateToken(Map<String, Object> extraClaims, UserDetails userDetails) {
         return Jwts.builder()
-                .subject(userDetails.getUsername())
-                .issuedAt(new Date(System.currentTimeMillis()))
-                .expiration(new Date(System.currentTimeMillis() + jwtExpiration))
-                .claims().add(extraClaims).and()
+                .setClaims(extraClaims)
+                .setSubject(userDetails.getUsername())
+                .setIssuedAt(new Date(System.currentTimeMillis()))
+                .setExpiration(new Date(System.currentTimeMillis() + jwtExpiration))
                 .signWith(getSigningKey())
                 .compact();
     }
@@ -69,11 +69,13 @@ public class JwtService {
     }
 
     private Claims extractAllClaims(String token) {
+        // En la versión 0.12.x la API expone Jwts.parser() que devuelve un JwtParserBuilder
+        // hay que llamar build() antes de parsear
         return Jwts.parser()
-                .verifyWith(getSigningKey())
+                .setSigningKey(getSigningKey())
                 .build()
-                .parseSignedClaims(token)
-                .getPayload();
+                .parseClaimsJws(token)
+                .getBody();
     }
 
     private SecretKey getSigningKey() {

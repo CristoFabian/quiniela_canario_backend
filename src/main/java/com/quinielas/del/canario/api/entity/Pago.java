@@ -66,6 +66,22 @@ public class Pago {
     private boolean comprobanteWhatsapp = false;
 
     /**
+     * true mientras el comprobante fue enviado por WhatsApp y aún no existe un
+     * archivo cargado en la plataforma; el administrador debe subirlo él mismo.
+     * Se pone en false automáticamente en cuanto se adjunta un archivo.
+     */
+    @Column(name = "comprobante_admin", nullable = false)
+    private boolean comprobanteAdmin = false;
+
+    /** Evita acreditar dos veces un pago vencido como saldo a favor. */
+    @Column(name = "saldo_acreditado", nullable = false)
+    private boolean saldoAcreditado = false;
+
+    /** Monto de este pago que fue acreditado al saldo del jugador. */
+    @Column(name = "monto_saldo_acreditado", precision = 10, scale = 2)
+    private BigDecimal montoSaldoAcreditado;
+
+    /**
      * Pago rechazado del que deriva este reintento.
      * {@code null} si es el intento original (primer pago).
      * Permite rastrear el historial completo de intentos de pago.
@@ -118,6 +134,15 @@ public class Pago {
 
     public boolean isComprobanteWhatsapp()               { return comprobanteWhatsapp; }
     public void setComprobanteWhatsapp(boolean c)        { this.comprobanteWhatsapp = c; }
+
+    public boolean isComprobanteAdmin()                   { return comprobanteAdmin; }
+    public void setComprobanteAdmin(boolean c)            { this.comprobanteAdmin = c; }
+
+    public boolean isSaldoAcreditado()                   { return saldoAcreditado; }
+    public void setSaldoAcreditado(boolean s)             { this.saldoAcreditado = s; }
+
+    public BigDecimal getMontoSaldoAcreditado()           { return montoSaldoAcreditado; }
+    public void setMontoSaldoAcreditado(BigDecimal m)     { this.montoSaldoAcreditado = m; }
 
     public Pago getPagoOrigen()                          { return pagoOrigen; }
     public void setPagoOrigen(Pago pagoOrigen)           { this.pagoOrigen = pagoOrigen; }

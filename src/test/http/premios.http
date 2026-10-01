@@ -1,0 +1,98 @@
+### ─────────────────────────────────────────────────────────────────────────
+### PREMIOS — Entrega del premio monetario a los ganadores
+### Flujo: cerrar quiniela -> admin sube comprobante -> jugador confirma recepción
+### ─────────────────────────────────────────────────────────────────────────
+@baseUrl      = http://localhost:8080
+@jugadorToken = <pega_aqui_el_token_del_jugador_ganador>
+@adminToken   = <pega_aqui_el_token_del_admin>
+@quinielaId   = 1
+@ganadorId    = 1
+
+### ════════════════════════════════════════════════════════════════════════
+###  1. Cerrar la quiniela (calcula montoPremio para cada ganador)
+### ════════════════════════════════════════════════════════════════════════
+POST {{baseUrl}}/api/admin/quinielas/{{quinielaId}}/cerrar
+Authorization: Bearer {{adminToken}}
+
+###
+### Consultar el resultado del cierre (incluye montoPremio y estadoPremio por ganador)
+GET {{baseUrl}}/api/admin/quinielas/{{quinielaId}}/cierre
+Authorization: Bearer {{adminToken}}
+
+### ════════════════════════════════════════════════════════════════════════
+###  2. ADMIN — Listar y pagar premios
+### ════════════════════════════════════════════════════════════════════════
+
+### Listar premios de una quiniela (admin)
+GET {{baseUrl}}/api/admin/quinielas/{{quinielaId}}/premios
+Authorization: Bearer {{adminToken}}
+
+###
+### Detalle de un premio (admin)
+GET {{baseUrl}}/api/admin/premios/{{ganadorId}}
+Authorization: Bearer {{adminToken}}
+
+###
+### Subir comprobante de la transferencia del premio (admin) -> estado pasa a PAGADO
+### Reemplaza la ruta del archivo por una válida en tu equipo.
+PUT {{baseUrl}}/api/admin/premios/{{ganadorId}}/comprobante
+Authorization: Bearer {{adminToken}}
+Content-Type: multipart/form-data; boundary=BOUNDARY
+
+--BOUNDARY
+Content-Disposition: form-data; name="comprobante"; filename="comprobante_premio.png"
+Content-Type: image/png
+
+< C:\ruta\a\tu\comprobante_premio.png
+--BOUNDARY--
+
+###
+### Descargar/visualizar el comprobante del premio (admin)
+GET {{baseUrl}}/api/admin/premios/{{ganadorId}}/comprobante
+Authorization: Bearer {{adminToken}}
+
+### ════════════════════════════════════════════════════════════════════════
+###  3. JUGADOR — Ver y confirmar recepción del premio
+### ════════════════════════════════════════════════════════════════════════
+
+### Listar todos mis premios (todas las quinielas ganadas)
+GET {{baseUrl}}/api/jugador/premios
+Authorization: Bearer {{jugadorToken}}
+
+###
+### Detalle de un premio propio
+GET {{baseUrl}}/api/jugador/premios/{{ganadorId}}
+Authorization: Bearer {{jugadorToken}}
+
+###
+### Descargar/visualizar el comprobante de mi premio
+GET {{baseUrl}}/api/jugador/premios/{{ganadorId}}/comprobante
+Authorization: Bearer {{jugadorToken}}
+
+###
+### Confirmar que ya recibí el premio (solo si el admin ya subió el comprobante)
+PATCH {{baseUrl}}/api/jugador/premios/{{ganadorId}}/confirmar
+Authorization: Bearer {{jugadorToken}}
+
+
+### ADMIN — Comprobante 'otros' (evidencia pública)
+### Subir comprobante adicional visible para otros jugadores (admin)
+PUT {{baseUrl}}/api/admin/premios/{{ganadorId}}/comprobante-otros
+Authorization: Bearer {{adminToken}}
+Content-Type: multipart/form-data; boundary=BOUNDARY
+
+--BOUNDARY
+Content-Disposition: form-data; name="comprobante"; filename="comprobante_otros.png"
+Content-Type: image/png
+
+< C:\ruta\a\tu\comprobante_otros.png
+--BOUNDARY--
+
+### Descargar/visualizar comprobante 'otros' (admin)
+GET {{baseUrl}}/api/admin/premios/{{ganadorId}}/comprobante-otros
+Authorization: Bearer {{adminToken}}
+
+### Eliminar comprobante 'otros' (admin)
+DELETE {{baseUrl}}/api/admin/premios/{{ganadorId}}/comprobante-otros
+Authorization: Bearer {{adminToken}}
+

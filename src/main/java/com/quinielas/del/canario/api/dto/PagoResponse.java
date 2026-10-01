@@ -2,6 +2,7 @@ package com.quinielas.del.canario.api.dto;
 
 import com.quinielas.del.canario.api.entity.EstadoPago;
 import com.quinielas.del.canario.api.entity.Pago;
+import com.quinielas.del.canario.api.entity.User;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -13,17 +14,21 @@ public class PagoResponse {
     private Long         id;
     private Long         usuarioId;
     private String       usuarioUsername;
+    private String       nombreCompleto;
     private List<JugadaResumenEnPago> jugadas;
     private BigDecimal   monto;
     private String       comprobanteUrl;
     private EstadoPago   estado;
-    private String       validadoPorUsername;
     private String       observacion;
     private boolean      comprobanteWhatsapp;
+    private boolean      comprobanteAdmin;
     private Long         pagoOrigenId;
     private LocalDateTime fechaCreacion;
     private LocalDateTime fechaValidacion;
     private int          totalJugadas;
+    private boolean      saldoAcreditado;
+    private BigDecimal   montoSaldoAcreditado;
+    private BigDecimal   saldoJugador;
 
     public PagoResponse() {}
 
@@ -33,12 +38,13 @@ public class PagoResponse {
         r.id                  = p.getId();
         r.usuarioId           = p.getUsuario().getId();
         r.usuarioUsername     = p.getUsuario().getUsername();
+        r.nombreCompleto      = obtenerNombreCompleto(p.getUsuario());
         r.monto               = p.getMonto();
         r.comprobanteUrl      = p.getComprobanteUrl();
         r.estado              = p.getEstado();
-        r.validadoPorUsername = p.getValidadoPor() != null ? p.getValidadoPor().getUsername() : null;
         r.observacion         = p.getObservacion();
         r.comprobanteWhatsapp = p.isComprobanteWhatsapp();
+        r.comprobanteAdmin    = p.isComprobanteAdmin();
         r.pagoOrigenId        = p.getPagoOrigen() != null ? p.getPagoOrigen().getId() : null;
         r.fechaCreacion       = p.getFechaCreacion();
         r.fechaValidacion     = p.getFechaValidacion();
@@ -46,10 +52,38 @@ public class PagoResponse {
                                   .map(JugadaResumenEnPago::from)
                                   .collect(Collectors.toList());
         r.totalJugadas        = r.jugadas.size();
+        r.saldoAcreditado     = p.isSaldoAcreditado();
+        r.montoSaldoAcreditado = p.getMontoSaldoAcreditado();
+        r.saldoJugador        = p.getUsuario().getPerfil() != null
+                                  ? p.getUsuario().getPerfil().getSaldoAFavor()
+                                  : BigDecimal.ZERO;
         return r;
     }
 
     // ─── Resumen de jugada dentro de un pago ──────────────────────────
+    private static String obtenerNombreCompleto(User usuario) {
+        if (usuario == null) return null;
+        if (usuario.getPerfil() == null) return usuario.getUsername();
+
+        String nombre = usuario.getPerfil().getNombre();
+        String apellidoPaterno = usuario.getPerfil().getApellidoPaterno();
+        String apellidoMaterno = usuario.getPerfil().getApellidoMaterno();
+
+        StringBuilder sb = new StringBuilder();
+        if (nombre != null && !nombre.isBlank()) sb.append(nombre.trim());
+        if (apellidoPaterno != null && !apellidoPaterno.isBlank()) {
+            if (sb.length() > 0) sb.append(' ');
+            sb.append(apellidoPaterno.trim());
+        }
+        if (apellidoMaterno != null && !apellidoMaterno.isBlank()) {
+            if (sb.length() > 0) sb.append(' ');
+            sb.append(apellidoMaterno.trim());
+        }
+
+        String nombreCompleto = sb.toString().trim();
+        return nombreCompleto.isEmpty() ? usuario.getUsername() : nombreCompleto;
+    }
+
     public static class JugadaResumenEnPago {
         private Long       id;
         private Long       quinielaId;
@@ -104,6 +138,9 @@ public class PagoResponse {
     public String getUsuarioUsername()                     { return usuarioUsername; }
     public void setUsuarioUsername(String u)               { this.usuarioUsername = u; }
 
+    public String getNombreCompleto()                      { return nombreCompleto; }
+    public void setNombreCompleto(String nombreCompleto)   { this.nombreCompleto = nombreCompleto; }
+
     public List<JugadaResumenEnPago> getJugadas()          { return jugadas; }
     public void setJugadas(List<JugadaResumenEnPago> j)    { this.jugadas = j; }
 
@@ -116,14 +153,15 @@ public class PagoResponse {
     public EstadoPago getEstado()                          { return estado; }
     public void setEstado(EstadoPago estado)               { this.estado = estado; }
 
-    public String getValidadoPorUsername()                 { return validadoPorUsername; }
-    public void setValidadoPorUsername(String v)           { this.validadoPorUsername = v; }
 
     public String getObservacion()                         { return observacion; }
     public void setObservacion(String observacion)         { this.observacion = observacion; }
 
     public boolean isComprobanteWhatsapp()                 { return comprobanteWhatsapp; }
     public void setComprobanteWhatsapp(boolean c)          { this.comprobanteWhatsapp = c; }
+
+    public boolean isComprobanteAdmin()                    { return comprobanteAdmin; }
+    public void setComprobanteAdmin(boolean c)             { this.comprobanteAdmin = c; }
 
     public Long getPagoOrigenId()                          { return pagoOrigenId; }
     public void setPagoOrigenId(Long pagoOrigenId)         { this.pagoOrigenId = pagoOrigenId; }
@@ -136,5 +174,11 @@ public class PagoResponse {
 
     public int getTotalJugadas()                           { return totalJugadas; }
     public void setTotalJugadas(int totalJugadas)          { this.totalJugadas = totalJugadas; }
+    public boolean isSaldoAcreditado()                     { return saldoAcreditado; }
+    public void setSaldoAcreditado(boolean s)              { this.saldoAcreditado = s; }
+    public BigDecimal getMontoSaldoAcreditado()            { return montoSaldoAcreditado; }
+    public void setMontoSaldoAcreditado(BigDecimal m)      { this.montoSaldoAcreditado = m; }
+    public BigDecimal getSaldoJugador()                    { return saldoJugador; }
+    public void setSaldoJugador(BigDecimal s)              { this.saldoJugador = s; }
 }
 

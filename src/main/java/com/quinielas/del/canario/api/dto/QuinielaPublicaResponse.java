@@ -4,6 +4,7 @@ import com.quinielas.del.canario.api.entity.EstadoQuiniela;
 import com.quinielas.del.canario.api.entity.Quiniela;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -14,6 +15,9 @@ import java.util.stream.Collectors;
  */
 public class QuinielaPublicaResponse {
 
+    /** Porcentaje que se retiene sobre la bolsa acumulada al mostrarla al jugador. */
+    private static final BigDecimal FACTOR_NETO = new BigDecimal("0.90");
+
     private Long id;
     private String nombre;
     private String descripcion;
@@ -23,6 +27,11 @@ public class QuinielaPublicaResponse {
     private LocalDateTime fechaCierre;
     private LocalDateTime fechaCreacion;
     private int totalPartidos;
+    /**
+     * Bolsa acumulada visible para el jugador: bolsa acumulada real de la quiniela
+     * menos un 10% (comisión/retención), redondeada a 2 decimales.
+     */
+    private BigDecimal bolsaAcumulada;
 
     /** Partidos incluidos solo en la vista de detalle; null en listados. */
     private List<PartidoResponse> partidos;
@@ -41,6 +50,9 @@ public class QuinielaPublicaResponse {
         r.fechaCierre   = q.getFechaCierre();
         r.fechaCreacion = q.getFechaCreacion();
         r.totalPartidos = q.getPartidos().size();
+        r.bolsaAcumulada = q.getBolsaAcumulada() != null
+                ? q.getBolsaAcumulada().multiply(FACTOR_NETO).setScale(2, RoundingMode.HALF_UP)
+                : null;
         return r;
     }
 
@@ -81,6 +93,9 @@ public class QuinielaPublicaResponse {
 
     public int getTotalPartidos()                    { return totalPartidos; }
     public void setTotalPartidos(int totalPartidos)  { this.totalPartidos = totalPartidos; }
+
+    public BigDecimal getBolsaAcumulada()                     { return bolsaAcumulada; }
+    public void setBolsaAcumulada(BigDecimal bolsaAcumulada)  { this.bolsaAcumulada = bolsaAcumulada; }
 
     public List<PartidoResponse> getPartidos()              { return partidos; }
     public void setPartidos(List<PartidoResponse> partidos) { this.partidos = partidos; }

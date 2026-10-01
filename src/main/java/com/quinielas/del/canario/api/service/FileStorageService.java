@@ -1,29 +1,33 @@
 package com.quinielas.del.canario.api.service;
 
+import com.quinielas.del.canario.api.service.storage.StorageService;
 import org.apache.tika.Tika;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
-import org.springframework.core.io.UrlResource;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
 /**
- * Servicio responsable de guardar y eliminar archivos en disco.
- *  - Fotos de perfil : uploads/perfiles    (jpg/jpeg/png/webp, máx 2 MB)
- *  - Comprobantes    : uploads/comprobantes (jpg/jpeg/png/pdf, máx 5 MB, sin URL pública)
+ * Servicio de negocio para guardar y eliminar archivos (fotos y comprobantes).
+ * Se encarga de:
+ *  - Validar extensión, tamaño y contenido real (Tika) del archivo.
+ *  - Generar nombres de archivo seguros y únicos.
+ *  - Delegar el almacenamiento físico en {@link StorageService} (disco local
+ *    u Oracle Object Storage, según {@code app.storage.provider}).
+ *
+ *  - Fotos de perfil : carpeta "perfiles"    (jpg/jpeg/png/webp, máx 2 MB)
+ *  - Comprobantes    : carpeta "comprobantes" (jpg/jpeg/png/pdf, máx 5 MB, sin URL pública)
  */
 @Service
 public class FileStorageService {
+
+    private static final String CARPETA_PERFILES     = "perfiles";
+    private static final String CARPETA_COMPROBANTES = "comprobantes";
 
     // ─── Foto de perfil ───────────────────────────────────────────────
     private static final Set<String>        EXT_FOTO  = Set.of("jpg", "jpeg", "png", "webp");
@@ -47,16 +51,12 @@ public class FileStorageService {
 
     private static final long               MAX_COMPROBANTE = 5L * 1024 * 1024; // 5 MB
 
-    @Value("${app.upload.dir}")
-    private String uploadDir;
-
-    @Value("${app.upload.dir.comprobantes}")
-    private String comprobanteDir;
-
     private final Tika tika;
+    private final StorageService storageService;
 
-    public FileStorageService(Tika tika) {
+    public FileStorageService(Tika tika, StorageService storageService) {
         this.tika = tika;
+        this.storageService = storageService;
     }
 
     // ═════════════════════════════════════════════════════════════════
@@ -74,15 +74,32 @@ public class FileStorageService {
      */
     public String guardarFoto(MultipartFile file, Long userId) throws IOException {
         validarFoto(file);
-        Path destino = resolverDirectorio(uploadDir);
         String nombre = generarNombreFoto(userId, file.getOriginalFilename());
-        Files.copy(file.getInputStream(), destino.resolve(nombre), StandardCopyOption.REPLACE_EXISTING);
+        storageService.guardar(CARPETA_PERFILES, nombre, file);
         return nombre;
     }
 
-    /** Elimina una foto de perfil del disco (silencioso si no existe). */
+    /** Elimina una foto de perfil del almacenamiento (silencioso si no existe). */
     public void eliminarFoto(String nombre) {
-        eliminarArchivo(uploadDir, nombre);
+        storageService.eliminar(CARPETA_PERFILES, nombre);
+    }
+
+    /**
+     * URL pública y directa de la foto de perfil, o {@code null} si el backend
+     * activo no soporta URLs públicas absolutas (en ese caso, se sirve por el
+     * recurso estático /perfiles/** de Spring, según app.upload.url-prefix).
+     */
+    public String obtenerUrlPublicaFoto(String nombre) {
+        if (nombre == null || nombre.isBlank()) return null;
+        return storageService.obtenerUrlPublica(CARPETA_PERFILES, nombre);
+    }
+
+    /**
+     * Carga una foto de perfil como {@code Resource} (usado por {@code PublicFileController}
+     * como fallback cuando el bucket de Object Storage es privado y no hay URL pública).
+     */
+    public Resource cargarFotoComoResource(String nombre) throws IOException {
+        return storageService.cargar(CARPETA_PERFILES, nombre);
     }
 
     // ═════════════════════════════════════════════════════════════════
@@ -92,17 +109,70 @@ public class FileStorageService {
     /**
      * Guarda el comprobante de pago y devuelve el nombre generado.
      * Nombre seguro: pago_{pagoId}_{UUID}.{ext}
+     * Se organiza por quiniela: comprobantes/{nombreQuiniela}/pago_{pagoId}_{UUID}.{ext}
      *
      * Validaciones:
      *  - Extensión: jpg, jpeg, png, pdf
      *  - MIME type: image/jpeg, image/png, application/pdf (application/octet-stream permitido)
      *  - Tamaño máximo: 5 MB
      */
+    public String guardarComprobante(MultipartFile file, Long pagoId, String nombreQuiniela) throws IOException {
+        validarComprobante(file);
+        String nombre = generarNombreComprobante(pagoId, file.getOriginalFilename());
+        String carpetaConQuiniela = construirCarpetaComprobantes(nombreQuiniela);
+        storageService.guardar(carpetaConQuiniela, nombre, file);
+        return nombre;
+    }
+
+    /**
+     * Sobrecarga para compatibilidad con código existente (sin organización por quiniela).
+     * @deprecated Usar guardarComprobante(file, pagoId, nombreQuiniela) en su lugar.
+     */
+    @Deprecated
     public String guardarComprobante(MultipartFile file, Long pagoId) throws IOException {
         validarComprobante(file);
-        Path destino = resolverDirectorio(comprobanteDir);
         String nombre = generarNombreComprobante(pagoId, file.getOriginalFilename());
-        Files.copy(file.getInputStream(), destino.resolve(nombre), StandardCopyOption.REPLACE_EXISTING);
+        storageService.guardar(CARPETA_COMPROBANTES, nombre, file);
+        return nombre;
+    }
+
+    /**
+     * Guarda el comprobante de pago de un premio (transferencia realizada por el
+     * administrador a un ganador) y devuelve el nombre generado.
+     * Nombre seguro: premio_{ganadorId}_{UUID}.{ext}
+     * Se organiza por quiniela: comprobantes/{nombreQuiniela}/premio_{ganadorId}_{UUID}.{ext}
+     * Reutiliza las mismas validaciones y estructura que los comprobantes de pago.
+     */
+    public String guardarComprobantePremio(MultipartFile file, Long ganadorId, String nombreQuiniela) throws IOException {
+        validarComprobante(file);
+        String nombre = generarNombreComprobantePremio(ganadorId, file.getOriginalFilename());
+        String carpetaConQuiniela = construirCarpetaComprobantes(nombreQuiniela);
+        storageService.guardar(carpetaConQuiniela, nombre, file);
+        return nombre;
+    }
+
+    /**
+     * Guarda un comprobante adicional (visible para otros jugadores) y devuelve el nombre generado.
+     * Nombre seguro: premio_otros_{ganadorId}_{UUID}.{ext}
+     * Se organiza por quiniela: comprobantes/{nombreQuiniela}/premio_otros_{ganadorId}_{UUID}.{ext}
+     */
+    public String guardarComprobantePremioOtros(MultipartFile file, Long ganadorId, String nombreQuiniela) throws IOException {
+        validarComprobante(file);
+        String nombre = generarNombreComprobantePremioOtros(ganadorId, file.getOriginalFilename());
+        String carpetaConQuiniela = construirCarpetaComprobantes(nombreQuiniela);
+        storageService.guardar(carpetaConQuiniela, nombre, file);
+        return nombre;
+    }
+
+    /**
+     * Sobrecarga para compatibilidad con código existente (sin organización por quiniela).
+     * @deprecated Usar guardarComprobantePremio(file, ganadorId, nombreQuiniela) en su lugar.
+     */
+    @Deprecated
+    public String guardarComprobantePremio(MultipartFile file, Long ganadorId) throws IOException {
+        validarComprobante(file);
+        String nombre = generarNombreComprobantePremio(ganadorId, file.getOriginalFilename());
+        storageService.guardar(CARPETA_COMPROBANTES, nombre, file);
         return nombre;
     }
 
@@ -112,17 +182,30 @@ public class FileStorageService {
      * @throws IOException si el archivo no existe o no es legible
      */
     public Resource cargarComprobante(String nombre) throws IOException {
-        Path ruta = Paths.get(comprobanteDir).toAbsolutePath().normalize().resolve(nombre);
-        Resource resource = new UrlResource(ruta.toUri());
-        if (!resource.exists() || !resource.isReadable()) {
-            throw new IOException("Comprobante no encontrado: " + nombre);
-        }
-        return resource;
+        return storageService.cargar(CARPETA_COMPROBANTES, nombre);
     }
 
-    /** Elimina un comprobante del disco (silencioso si no existe). */
+    /**
+     * Carga un comprobante de una quiniela específica como {@code Resource}.
+     *
+     * @throws IOException si el archivo no existe o no es legible
+     */
+    public Resource cargarComprobante(String nombre, String nombreQuiniela) throws IOException {
+        String carpetaConQuiniela = construirCarpetaComprobantes(nombreQuiniela);
+        return storageService.cargar(carpetaConQuiniela, nombre);
+    }
+
+    /** Elimina un comprobante del almacenamiento (silencioso si no existe). */
     public void eliminarComprobante(String nombre) {
-        eliminarArchivo(comprobanteDir, nombre);
+        storageService.eliminar(CARPETA_COMPROBANTES, nombre);
+    }
+
+    /**
+     * Elimina un comprobante de una quiniela específica (silencioso si no existe).
+     */
+    public void eliminarComprobante(String nombre, String nombreQuiniela) {
+        String carpetaConQuiniela = construirCarpetaComprobantes(nombreQuiniela);
+        storageService.eliminar(carpetaConQuiniela, nombre);
     }
 
     /**
@@ -139,7 +222,41 @@ public class FileStorageService {
         };
     }
 
-    // ─── Privados ─────────────────────────────────────────────────────
+    // ─── Privados ─────────────────────────────────────────────────
+
+    /**
+     * Construye el path completo de la carpeta de comprobantes para una quiniela.
+     * Sanitiza el nombre de la quiniela para evitar inyección de caracteres especiales.
+     */
+    private String construirCarpetaComprobantes(String nombreQuiniela) {
+        if (nombreQuiniela == null || nombreQuiniela.isBlank()) {
+            return CARPETA_COMPROBANTES;
+        }
+        String sanitizado = sanitizarNombreQuiniela(nombreQuiniela);
+        return CARPETA_COMPROBANTES + "/" + sanitizado;
+    }
+
+    /**
+     * Sanitiza el nombre de la quiniela para uso como parte de un path de archivo.
+     * Elimina caracteres especiales, barras, puntos y espacios múltiples.
+     * Reemplaza espacios simples con guiones bajos.
+     */
+    private String sanitizarNombreQuiniela(String nombre) {
+        return nombre
+                // Reemplazar espacios múltiples con uno solo
+                .replaceAll("\\s+", " ")
+                // Eliminar caracteres especiales peligrosos (slashes, backslashes, puntos, etc.)
+                .replaceAll("[/\\\\:*?\"<>|.]+", "")
+                // Reemplazar espacios simples con guiones bajos
+                .replaceAll("\\s+", "_")
+                // Convertir a minúsculas
+                .toLowerCase()
+                // Limitar a 100 caracteres
+                .substring(0, Math.min(100, nombre.length()));
+    }
+
+    // ─── Validación privada ────────────────────────────────────────
+
 
     private void validarFoto(MultipartFile file) throws IOException {
         if (file == null || file.isEmpty())
@@ -236,19 +353,18 @@ public class FileStorageService {
         return "pago_" + pagoId + "_" + uuid + "." + ext;
     }
 
-    private Path resolverDirectorio(String dir) throws IOException {
-        Path path = Paths.get(dir).toAbsolutePath().normalize();
-        Files.createDirectories(path);
-        return path;
+    private String generarNombreComprobantePremio(Long ganadorId, String originalFilename) {
+        String ext  = obtenerExtension(originalFilename);
+        String uuid = UUID.randomUUID().toString().replace("-", "");
+        return "premio_" + ganadorId + "_" + uuid + "." + ext;
     }
 
-    private void eliminarArchivo(String dir, String nombre) {
-        if (nombre == null || nombre.isBlank()) return;
-        try {
-            Files.deleteIfExists(
-                Paths.get(dir).toAbsolutePath().normalize().resolve(nombre));
-        } catch (IOException ignored) {}
+    private String generarNombreComprobantePremioOtros(Long ganadorId, String originalFilename) {
+        String ext  = obtenerExtension(originalFilename);
+        String uuid = UUID.randomUUID().toString().replace("-", "");
+        return "premio_otros_" + ganadorId + "_" + uuid + "." + ext;
     }
+
 
     private String obtenerExtension(String filename) {
         if (filename == null || !filename.contains(".")) return "jpg";

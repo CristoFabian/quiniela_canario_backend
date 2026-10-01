@@ -2,14 +2,18 @@ package com.quinielas.del.canario.api.entity;
 
 import jakarta.persistence.*;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+
 /**
  * Registro de cada ganador de una quiniela.
  *
  * <p>Si hubo empate definitivo, existirán múltiples registros con el
  * mismo {@code puntosObtenidos} vinculados al mismo {@link CierreQuiniela}.
  *
- * <p>Este registro es inmutable una vez persistido: los puntos y posición
- * NO deben recalcularse después del cierre.
+ * <p>Los campos de puntos, posición y criterio son inmutables una vez
+ * persistidos. Los campos de premio ({@code montoPremio}, {@code estadoPremio},
+ * comprobante, etc.) sí se actualizan durante el flujo de entrega del premio.
  */
 @Entity
 @Table(name = "ganador_quiniela")
@@ -62,6 +66,48 @@ public class GanadorQuiniela {
     @Column(name = "criterio_aplicado", nullable = false, length = 60)
     private String criterioAplicado;
 
+    // ─── Entrega del premio monetario ─────────────────────────────────
+
+    /**
+     * Monto del premio que corresponde a este ganador.
+     * Se calcula al cierre repartiendo {@code Quiniela.bolsaAcumulada} en
+     * partes iguales entre todos los ganadores (registros de este cierre).
+     */
+    @Column(name = "monto_premio", precision = 10, scale = 2)
+    private BigDecimal montoPremio;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "estado_premio", nullable = false, length = 20)
+    private EstadoPremio estadoPremio = EstadoPremio.PENDIENTE;
+
+    /**
+     * Nombre del archivo del comprobante de la transferencia/pago del premio,
+     * subido por el administrador. Se guarda en uploads/comprobantes.
+     */
+    @Column(name = "comprobante_premio_url", length = 255)
+    private String comprobantePremioUrl;
+
+    /**
+     * Comprobante adicional que puede utilizar la administración para mostrar a
+     * otros jugadores que el pago del premio efectivamente se realizó.
+     * Se almacena también como nombre/URL relativo en uploads/comprobantes.
+     */
+    @Column(name = "comprobante_premio_otros_url", length = 255)
+    private String comprobantePremioOtrosUrl;
+
+    /** Administrador que subió el comprobante y marcó el premio como pagado. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "pagado_por")
+    private User pagadoPor;
+
+    /** Momento en que el administrador registró el pago del premio. */
+    @Column(name = "fecha_pago_premio")
+    private LocalDateTime fechaPagoPremio;
+
+    /** Momento en que el jugador confirmó haber recibido el premio. */
+    @Column(name = "fecha_confirmacion_jugador")
+    private LocalDateTime fechaConfirmacionJugador;
+
     // ─── Constructores ────────────────────────────────────────────────
     public GanadorQuiniela() {}
 
@@ -89,5 +135,26 @@ public class GanadorQuiniela {
 
     public String getCriterioAplicado()                    { return criterioAplicado; }
     public void setCriterioAplicado(String v)              { this.criterioAplicado = v; }
+
+    public BigDecimal getMontoPremio()                     { return montoPremio; }
+    public void setMontoPremio(BigDecimal v)               { this.montoPremio = v; }
+
+    public EstadoPremio getEstadoPremio()                  { return estadoPremio; }
+    public void setEstadoPremio(EstadoPremio v)            { this.estadoPremio = v; }
+
+    public String getComprobantePremioUrl()                { return comprobantePremioUrl; }
+    public void setComprobantePremioUrl(String v)          { this.comprobantePremioUrl = v; }
+
+    public String getComprobantePremioOtrosUrl()           { return comprobantePremioOtrosUrl; }
+    public void setComprobantePremioOtrosUrl(String v)     { this.comprobantePremioOtrosUrl = v; }
+
+    public User getPagadoPor()                             { return pagadoPor; }
+    public void setPagadoPor(User v)                       { this.pagadoPor = v; }
+
+    public LocalDateTime getFechaPagoPremio()              { return fechaPagoPremio; }
+    public void setFechaPagoPremio(LocalDateTime v)        { this.fechaPagoPremio = v; }
+
+    public LocalDateTime getFechaConfirmacionJugador()     { return fechaConfirmacionJugador; }
+    public void setFechaConfirmacionJugador(LocalDateTime v) { this.fechaConfirmacionJugador = v; }
 }
 

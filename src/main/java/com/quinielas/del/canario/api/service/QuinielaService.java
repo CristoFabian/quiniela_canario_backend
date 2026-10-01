@@ -2,10 +2,12 @@ package com.quinielas.del.canario.api.service;
 
 import com.quinielas.del.canario.api.dto.*;
 import com.quinielas.del.canario.api.entity.*;
+import com.quinielas.del.canario.api.event.QuinielaAbiertaEvent;
 import com.quinielas.del.canario.api.repository.JugadaRepository;
 import com.quinielas.del.canario.api.repository.PartidoRepository;
 import com.quinielas.del.canario.api.repository.QuinielaRepository;
 import com.quinielas.del.canario.api.util.FechaUtil;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,15 +22,18 @@ public class QuinielaService {
     private final PartidoRepository  partidoRepository;
     private final EvaluacionService  evaluacionService;
     private final JugadaRepository   jugadaRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     public QuinielaService(QuinielaRepository quinielaRepository,
                            PartidoRepository  partidoRepository,
                            EvaluacionService  evaluacionService,
-                           JugadaRepository   jugadaRepository) {
+                           JugadaRepository   jugadaRepository,
+                           ApplicationEventPublisher eventPublisher) {
         this.quinielaRepository = quinielaRepository;
         this.partidoRepository  = partidoRepository;
         this.evaluacionService  = evaluacionService;
         this.jugadaRepository   = jugadaRepository;
+        this.eventPublisher     = eventPublisher;
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -118,7 +123,16 @@ public class QuinielaService {
     @Transactional(readOnly = true)
     public QuinielaResponse obtenerDetalle(Long id) {
         Quiniela quiniela = buscarQuinielaOException(id);
-        return QuinielaResponse.fromDetalle(quiniela);
+        QuinielaResponse response = QuinielaResponse.fromDetalle(quiniela);
+        response.setTotalParticipantes(contarParticipantes(id));
+        return response;
+    }
+
+    /** Jugadas con pago confirmado (ACTIVA o FINALIZADA) = participantes de la quiniela. */
+    private int contarParticipantes(Long quinielaId) {
+        long activas    = jugadaRepository.countByQuinielaIdAndEstado(quinielaId, EstadoJugada.ACTIVA);
+        long finalizadas = jugadaRepository.countByQuinielaIdAndEstado(quinielaId, EstadoJugada.FINALIZADA);
+        return (int) (activas + finalizadas);
     }
 
     /**
@@ -186,6 +200,10 @@ public class QuinielaService {
 
         quiniela.setEstado(nuevoEstado);
         QuinielaResponse response = QuinielaResponse.from(quinielaRepository.save(quiniela));
+
+        if (nuevoEstado == EstadoQuiniela.ABIERTA) {
+            eventPublisher.publishEvent(new QuinielaAbiertaEvent(quiniela.getId(), quiniela.getNombre()));
+        }
 
         // ── Al pasar a EN_JUEGO: expirar CREADAS + advertir sobre PENDIENTE_VALIDACION ──
         if (nuevoEstado == EstadoQuiniela.EN_JUEGO) {
@@ -328,6 +346,8 @@ public class QuinielaService {
      * Todos los campos son opcionales (solo se actualizan los que se envíen).
      * Si al finalizar la actualización todos los campos de resultado están
      * completos, el estado del partido cambia automáticamente a FINALIZADO.
+     * Si el partido ya estaba FINALIZADO, permite corregir un error de captura:
+     * los pronósticos se revierten y se vuelven a evaluar con el dato corregido.
      */
     @Transactional
     public PartidoResponse actualizarResultados(Long partidoId,
@@ -335,18 +355,19 @@ public class QuinielaService {
         Partido partido = buscarPartidoOException(partidoId);
         Quiniela quiniela = partido.getQuiniela();
 
-        // La quiniela debe estar EN_JUEGO para poder cargar resultados
+        // La quiniela debe estar EN_JUEGO para poder cargar o corregir resultados
         if (quiniela.getEstado() != EstadoQuiniela.EN_JUEGO) {
             throw new IllegalArgumentException(
                     "No se pueden registrar resultados. La quiniela debe estar en estado EN_JUEGO " +
                     "(estado actual: " + quiniela.getEstado() + ").");
         }
 
-        // El partido debe estar EN_JUEGO para poder cargar resultados
-        if (partido.getEstado() != EstadoPartido.EN_JUEGO) {
+        // El partido debe estar EN_JUEGO, o FINALIZADO para corregir un error de captura
+        boolean yaEstabaFinalizado = partido.getEstado() == EstadoPartido.FINALIZADO;
+        if (partido.getEstado() != EstadoPartido.EN_JUEGO && !yaEstabaFinalizado) {
             throw new IllegalArgumentException(
-                    "No se pueden registrar resultados. El partido debe estar en estado EN_JUEGO " +
-                    "(estado actual: " + partido.getEstado() + ").");
+                    "No se pueden registrar resultados. El partido debe estar en estado EN_JUEGO o " +
+                    "FINALIZADO (estado actual: " + partido.getEstado() + ").");
         }
 
         if (request.getMarcadorLocal() != null)
@@ -372,9 +393,14 @@ public class QuinielaService {
 
         Partido guardado = partidoRepository.save(partido);
 
-        // Evaluación automática incremental al finalizar el partido
+        // Evaluación automática al finalizar; si ya estaba FINALIZADO, se revierte
+        // la evaluación previa y se recalcula con el resultado corregido.
         if (guardado.getEstado() == EstadoPartido.FINALIZADO) {
-            evaluacionService.evaluarPartido(guardado.getId());
+            if (yaEstabaFinalizado) {
+                evaluacionService.reevaluarPartido(guardado.getId());
+            } else {
+                evaluacionService.evaluarPartido(guardado.getId());
+            }
         }
 
         return PartidoResponse.from(guardado);
@@ -470,11 +496,12 @@ public class QuinielaService {
             }
         }
 
-        // Evaluación automática cuando el partido llega a estado terminal
+        // Evaluación al llegar a un estado terminal; revierte y recalcula si ya se había evaluado
+        // (p. ej. el admin cambia entre estados terminales corrigiendo una decisión anterior).
         if (nuevoEstado == EstadoPartido.FINALIZADO ||
             nuevoEstado == EstadoPartido.SUSPENDIDO ||
             nuevoEstado == EstadoPartido.POSPUESTO) {
-            evaluacionService.evaluarPartido(guardado.getId());
+            evaluacionService.reevaluarPartido(guardado.getId());
         }
 
         return PartidoResponse.from(guardado);

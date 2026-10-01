@@ -9,6 +9,7 @@ import com.quinielas.del.canario.api.repository.PartidoRepository;
 import com.quinielas.del.canario.api.repository.QuinielaRepository;
 import com.quinielas.del.canario.api.repository.TipoPronosticoRepository;
 import com.quinielas.del.canario.api.repository.UserProfileRepository;
+import com.quinielas.del.canario.api.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -20,6 +21,7 @@ import java.util.stream.Collectors;
 @Service
 public class PlayerService {
 
+    private final UserRepository         userRepository;
     private final UserProfileRepository  userProfileRepository;
     private final FileStorageService     fileStorageService;
     private final QuinielaRepository     quinielaRepository;
@@ -27,12 +29,14 @@ public class PlayerService {
     private final TipoPronosticoRepository tipoPronosticoRepository;
     private final CierreQuinielaService  cierreQuinielaService;
 
-    public PlayerService(UserProfileRepository userProfileRepository,
+    public PlayerService(UserRepository userRepository,
+                         UserProfileRepository userProfileRepository,
                          FileStorageService fileStorageService,
                          QuinielaRepository quinielaRepository,
                          PartidoRepository partidoRepository,
                          TipoPronosticoRepository tipoPronosticoRepository,
                          CierreQuinielaService cierreQuinielaService) {
+        this.userRepository          = userRepository;
         this.userProfileRepository   = userProfileRepository;
         this.fileStorageService      = fileStorageService;
         this.quinielaRepository      = quinielaRepository;
@@ -75,6 +79,23 @@ public class PlayerService {
 
         userProfileRepository.save(perfil);
         return PerfilResponse.from(user, perfil);
+    }
+
+    // ─── DELETE eliminar foto de perfil ───────────────────────────────
+    public PerfilResponse eliminarFoto(User user) {
+        UserProfile perfil = obtenerPerfil(user);
+
+        fileStorageService.eliminarFoto(perfil.getFoto());
+        perfil.setFoto(null);
+
+        userProfileRepository.save(perfil);
+        return PerfilResponse.from(user, perfil);
+    }
+
+    // ─── Baja lógica de la cuenta (autoservicio del jugador) ─────────
+    public void desactivarCuenta(User user) {
+        user.setActivo(false);
+        userRepository.save(user);
     }
 
     // ─── Quinielas disponibles (estado ABIERTA) ──────────────────────
@@ -129,7 +150,7 @@ public class PlayerService {
 
     // ─── Cierre de quiniela (resultado final, público para el jugador) ───
     @Transactional(readOnly = true)
-    public CierreQuinielaResponse obtenerCierreQuiniela(Long quinielaId) {
+    public CierreQuinielaResponse obtenerCierreQuiniela(Long quinielaId, User usuario) {
         Quiniela quiniela = quinielaRepository.findById(quinielaId)
                 .orElseThrow(() -> new IllegalStateException(
                         "Quiniela no encontrada con id: " + quinielaId));
@@ -138,7 +159,7 @@ public class PlayerService {
                     "La quiniela aun no está finalizada (estado actual: " +
                     quiniela.getEstado() + ").");
         }
-        return cierreQuinielaService.obtenerCierre(quinielaId);
+        return cierreQuinielaService.obtenerCierre(quinielaId, usuario.getId());
     }
 
     // ─── Compatibilidad con AdminService (UserProfileResponse simple) ─
@@ -147,7 +168,8 @@ public class PlayerService {
                 user.getId(),
                 user.getUsername(),
                 user.getEmail(),
-                user.getRole().name()
+                user.getRole().name(),
+                user.isActivo()
         );
     }
 

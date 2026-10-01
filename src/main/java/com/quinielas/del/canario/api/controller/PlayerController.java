@@ -69,6 +69,26 @@ public class PlayerController {
     }
 
     /**
+     * Elimina la foto de perfil actual, si existe.
+     * DELETE /api/jugador/perfil/foto
+     */
+    @DeleteMapping("/perfil/foto")
+    public ResponseEntity<PerfilResponse> eliminarFoto(@AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(playerService.eliminarFoto(user));
+    }
+
+    /**
+     * Baja lógica de la cuenta del jugador autenticado (activo = false).
+     * Solo un administrador puede reactivarla después.
+     * PUT /api/jugador/cuenta/desactivar
+     */
+    @PutMapping("/cuenta/desactivar")
+    public ResponseEntity<Void> desactivarCuenta(@AuthenticationPrincipal User user) {
+        playerService.desactivarCuenta(user);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
      * Devuelve las quinielas disponibles (estado ABIERTA) para el jugador.
      * GET /api/jugador/quinielas
      */
@@ -123,8 +143,10 @@ public class PlayerController {
      * GET /api/jugador/quinielas/{id}/cierre
      */
     @GetMapping("/quinielas/{id}/cierre")
-    public ResponseEntity<CierreQuinielaResponse> getCierreQuiniela(@PathVariable Long id) {
-        return ResponseEntity.ok(playerService.obtenerCierreQuiniela(id));
+    public ResponseEntity<CierreQuinielaResponse> getCierreQuiniela(
+            @AuthenticationPrincipal User user,
+            @PathVariable Long id) {
+        return ResponseEntity.ok(playerService.obtenerCierreQuiniela(id, user));
     }
 
     /**

@@ -6,6 +6,8 @@ public enum EstadoPago {
     /** Pago verificado y aprobado; las jugadas asociadas pasan a ACTIVA */
     APROBADO,
     /** Pago rechazado; las jugadas asociadas regresan a CREADA para reintentar */
-    RECHAZADO
+    RECHAZADO,
+    /** Estado administrativo posterior a la revisión, reservado para pagos cuya compensación ya fue resuelta. */
+    VENCIDO
 }
 

@@ -40,7 +40,8 @@ public class PagoController {
 
     /**
      * El jugador informa que realizó el pago y asocia una o varias jugadas.
-     * El comprobante es opcional; puede enviarse en una petición posterior.
+     * El comprobante es opcional si se marca comprobanteWhatsapp=true (lo enviará por WhatsApp),
+     * o si usarSaldoAFavor=true (se paga con el crédito acumulado, sin comprobante).
      *
      * POST /api/jugador/pagos
      * Content-Type: multipart/form-data
@@ -48,6 +49,8 @@ public class PagoController {
      *   jugadaIds  → uno o varios (p.ej. jugadaIds=1&jugadaIds=2)
      *   monto      → número decimal (p.ej. 100.00)
      *   comprobante → archivo (jpg, jpeg, png, webp, pdf) [opcional]
+     *   comprobanteWhatsapp → true si el jugador enviará el comprobante por WhatsApp [opcional, default false]
+     *   usarSaldoAFavor → true para pagar con el saldo a favor del jugador [opcional, default false]
      */
     @PostMapping(value = "/api/jugador/pagos", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
@@ -55,10 +58,18 @@ public class PagoController {
             @AuthenticationPrincipal User usuario,
             @RequestParam("jugadaIds") List<Long> jugadaIds,
             @RequestParam("monto") BigDecimal monto,
-            @RequestParam(value = "comprobante", required = false) MultipartFile comprobante)
+            @RequestParam(value = "comprobante", required = false) MultipartFile comprobante,
+            @RequestParam(value = "comprobanteWhatsapp", required = false,
+                          defaultValue = "false") boolean comprobanteWhatsapp,
+            @RequestParam(value = "usarSaldoAFavor", required = false,
+                          defaultValue = "false") boolean usarSaldoAFavor)
             throws IOException {
+        if (usarSaldoAFavor) {
+            return ResponseEntity.status(HttpStatus.CREATED)
+                    .body(pagoService.crearPagoConSaldo(usuario, jugadaIds, monto));
+        }
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(pagoService.crearPago(usuario, jugadaIds, monto, comprobante));
+                .body(pagoService.crearPago(usuario, jugadaIds, monto, comprobante, comprobanteWhatsapp));
     }
 
     /**
@@ -166,7 +177,8 @@ public class PagoController {
      *
      * GET /api/admin/pagos/por-jugador
      */
-    @GetMapping("/api/admin/pagos/por-jugador")
+    @GetMapping(path = {"/api/admin/pagos/por-jugador",
+                        "/api/admin/pagos/pendientes-por-jugador"})
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<ResumenPagosPorJugadorResponse>> resumenPendientesPorJugador() {
         return ResponseEntity.ok(pagoService.listarResumenPendientesPorJugador());
@@ -193,8 +205,11 @@ public class PagoController {
     /**
      * Detalle de cualquier pago (admin).
      * GET /api/admin/pagos/{id}
+     *
+     * Se mantiene la ruta original para compatibilidad con integraciones
+     * previas y también se soporta un alias explícito.
      */
-    @GetMapping("/api/admin/pagos/{id}")
+    @GetMapping(path = {"/api/admin/pagos/{id}", "/api/admin/pagos/detalle/{id}"})
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<PagoResponse> obtenerPago(@PathVariable Long id) {
         return ResponseEntity.ok(pagoService.obtenerPago(id));

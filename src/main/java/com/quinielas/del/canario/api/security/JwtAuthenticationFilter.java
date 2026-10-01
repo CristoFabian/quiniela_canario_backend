@@ -31,6 +31,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        // Registration and login are public; stale tokens must not turn them into 401 responses.
+        return request.getServletPath().startsWith("/api/auth/");
+    }
+
+    @Override
     protected void doFilterInternal(
             @NonNull HttpServletRequest request,
             @NonNull HttpServletResponse response,
@@ -51,6 +57,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+
+                if (!userDetails.isEnabled()) {
+                    log.warn("Cuenta desactivada para el usuario '{}'", username);
+                    response.sendError(HttpServletResponse.SC_FORBIDDEN, "Tu cuenta ha sido desactivada");
+                    return;
+                }
 
                 if (jwtService.isTokenValid(jwt, userDetails)) {
                     UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(

@@ -156,14 +156,15 @@ public class QuinielaController {
 
     /**
      * Disparar la evaluación de pronósticos de un partido manualmente.
-     * Útil para re-evaluar o forzar la evaluación si el trigger automático falló.
+     * Vuelve a evaluar aunque ya se haya evaluado antes (revierte y recalcula),
+     * útil si el trigger automático falló o se corrigió un resultado.
      * El partido debe estar en estado FINALIZADO, SUSPENDIDO o POSPUESTO.
      *
      * POST /api/admin/partidos/{id}/evaluar
      */
     @PostMapping("/partidos/{id}/evaluar")
     public ResponseEntity<EvaluacionPartidoResponse> evaluarPartido(@PathVariable Long id) {
-        return ResponseEntity.ok(evaluacionService.evaluarPartido(id));
+        return ResponseEntity.ok(evaluacionService.reevaluarPartido(id));
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -215,6 +216,19 @@ public class QuinielaController {
     @GetMapping("/quinielas/{id}/ranking")
     public ResponseEntity<RankingQuinielaResponse> getRanking(@PathVariable Long id) {
         return ResponseEntity.ok(rankingService.obtenerRanking(id));
+    }
+
+    /**
+     * Ranking con detalle completo para el administrador: incluye, por cada jugada,
+     * todos los pronósticos elegidos (evaluados o no) junto con el resultado real
+     * del partido, para saber exactamente qué pronosticó el jugador y el porqué
+     * de su puntaje frente a los demás.
+     *
+     * GET /api/admin/quinielas/{id}/ranking-detalle
+     */
+    @GetMapping("/quinielas/{id}/ranking-detalle")
+    public ResponseEntity<RankingQuinielaAdminDetalleResponse> getRankingDetalle(@PathVariable Long id) {
+        return ResponseEntity.ok(rankingService.obtenerRankingDetalleAdmin(id));
     }
 }
 

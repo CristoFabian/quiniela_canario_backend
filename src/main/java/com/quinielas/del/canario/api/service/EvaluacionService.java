@@ -170,6 +170,41 @@ public class EvaluacionService {
         return respuesta;
     }
 
+    /**
+     * Revierte la evaluación previa de un partido (resta los puntos ya otorgados y marca sus
+     * pronósticos como pendientes) y vuelve a evaluarlo con el resultado corregido.
+     * Necesario porque {@link #evaluarPartido} ignora los pronósticos ya evaluados.
+     */
+    @Transactional
+    public EvaluacionPartidoResponse reevaluarPartido(Long partidoId) {
+        List<PronosticoJugado> evaluados = pronosticoRepo.findByPartidoIdAndEvaluadoTrue(partidoId);
+
+        if (!evaluados.isEmpty()) {
+            Map<Long, List<PronosticoJugado>> porJugada = evaluados.stream()
+                    .collect(Collectors.groupingBy(pj -> pj.getJugada().getId()));
+
+            List<Jugada> jugadasARevertir = new ArrayList<>();
+            for (List<PronosticoJugado> pronosticosJugada : porJugada.values()) {
+                Jugada jugada = pronosticosJugada.get(0).getJugada();
+                int puntosPrevios = pronosticosJugada.stream()
+                        .mapToInt(pj -> pj.getPuntosObtenidos() == null ? 0 : pj.getPuntosObtenidos())
+                        .sum();
+                int actual = jugada.getPuntosObtenidos() == null ? 0 : jugada.getPuntosObtenidos();
+                jugada.setPuntosObtenidos(actual - puntosPrevios);
+                jugadasARevertir.add(jugada);
+            }
+
+            evaluados.forEach(pj -> {
+                pj.setEvaluado(false);
+                pj.setPuntosObtenidos(null);
+            });
+            pronosticoRepo.saveAll(evaluados);
+            jugadaRepo.saveAll(jugadasARevertir);
+        }
+
+        return evaluarPartido(partidoId);
+    }
+
     // ─────────────────────────────────────────────────────────────────
     //  Lógica de puntuación
     // ─────────────────────────────────────────────────────────────────

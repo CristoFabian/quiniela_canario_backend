@@ -93,6 +93,15 @@
 			<artifactId>tika-core</artifactId>
 			<version>3.2.2</version>
 		</dependency>
+
+		<!-- AWS SDK v2 (cliente S3) usado para hablar con la API S3-Compatible
+		     de Oracle Object Storage en producción. No se usan credenciales AWS
+		     reales: se apunta al endpoint compat de OCI con "Customer Secret Keys". -->
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>s3</artifactId>
+			<version>2.29.29</version>
+		</dependency>
 	</dependencies>
 
 	<build>
@@ -100,7 +109,10 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-compiler-plugin</artifactId>
+				<version>3.14.1</version>
 				<configuration>
+					<!-- Ensure Java 17 language features (text blocks, switch expressions) are enabled -->
+					<release>${java.version}</release>
 					<annotationProcessorPaths>
 						<path>
 							<groupId>org.projectlombok</groupId>

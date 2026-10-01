@@ -1,6 +1,7 @@
 package com.quinielas.del.canario.api.dto;
 
 import com.quinielas.del.canario.api.entity.EstadoJugada;
+import com.quinielas.del.canario.api.entity.EstadoQuiniela;
 import com.quinielas.del.canario.api.entity.Jugada;
 
 import java.math.BigDecimal;
@@ -13,6 +14,7 @@ public class JugadaResponse {
     private Long          id;
     private Long          quinielaId;
     private String        quinielaNombre;
+    private EstadoQuiniela estadoQuiniela;
     private BigDecimal    costoQuiniela;
     private Integer       puntosObtenidos;
     private EstadoJugada  estado;
@@ -34,6 +36,7 @@ public class JugadaResponse {
         r.id               = j.getId();
         r.quinielaId       = j.getQuiniela().getId();
         r.quinielaNombre   = j.getQuiniela().getNombre();
+        r.estadoQuiniela   = j.getQuiniela().getEstado();
         r.costoQuiniela    = j.getQuiniela().getCosto();
         r.puntosObtenidos  = j.getPuntosObtenidos();
         r.estado           = j.getEstado();
@@ -62,6 +65,9 @@ public class JugadaResponse {
 
     public String getQuinielaNombre()                      { return quinielaNombre; }
     public void setQuinielaNombre(String quinielaNombre)   { this.quinielaNombre = quinielaNombre; }
+
+    public EstadoQuiniela getEstadoQuiniela()              { return estadoQuiniela; }
+    public void setEstadoQuiniela(EstadoQuiniela estadoQuiniela) { this.estadoQuiniela = estadoQuiniela; }
 
     public BigDecimal getCostoQuiniela()                   { return costoQuiniela; }
     public void setCostoQuiniela(BigDecimal costoQuiniela) { this.costoQuiniela = costoQuiniela; }

@@ -2,10 +2,14 @@ package com.quinielas.del.canario.api.service;
 
 import com.quinielas.del.canario.api.dto.CierreQuinielaResponse;
 import com.quinielas.del.canario.api.entity.*;
+import com.quinielas.del.canario.api.event.JugadaGanadoraEvent;
 import com.quinielas.del.canario.api.repository.*;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.*;
@@ -13,6 +17,17 @@ import java.util.stream.Collectors;
 
 /**
  * Proceso de cierre de quiniela.
+ *
+ * <h2>Regla fundamental: todos los ganadores comparten SIEMPRE el mismo puntaje</h2>
+ * <p>
+ * El desempate <b>nunca</b> elige a alguien con menos puntos que otro. Primero se
+ * determina el {@code puntajeMaximo} entre todas las jugadas elegibles y se arma el
+ * conjunto de <i>candidatas</i> = todas las jugadas que tienen exactamente ese puntaje.
+ * La cadena de desempate solo actúa <b>dentro</b> de ese conjunto ya empatado, usando
+ * criterios secundarios para decidir cuáles de esas jugadas (con el mismo puntaje)
+ * se declaran ganadoras oficiales. En ningún caso el desempate cambia el puntaje
+ * ganador ni promueve jugadas con menor puntaje.
+ * </p>
  *
  * <h2>Condiciones necesarias para ejecutar el cierre</h2>
  * <ol>
@@ -28,23 +43,37 @@ import java.util.stream.Collectors;
  *   <li>Verificar condiciones previas.</li>
  *   <li>Cargar todas las jugadas {@code ACTIVA} de la quiniela.</li>
  *   <li>Calcular el puntaje máximo entre todas ellas.</li>
- *   <li>Filtrar las jugadas con ese puntaje máximo → candidatas al primer lugar.</li>
- *   <li>Aplicar estrategia de desempate (ver abajo).</li>
+ *   <li>Filtrar las jugadas con ese puntaje máximo → candidatas al primer lugar
+ *       (todas con el mismo puntaje).</li>
+ *   <li>Contar cuántos <b>usuarios distintos</b> hay entre las candidatas:
+ *     <ul>
+ *       <li>Si son ≤ {@link #UMBRAL_DESEMPATE} (5): NO se aplica desempate, todas
+ *           las candidatas son ganadoras directamente (criterio {@code MAYOR_PUNTAJE}).</li>
+ *       <li>Si son &gt; {@link #UMBRAL_DESEMPATE}: se aplica la cadena de desempate
+ *           (ver abajo) para reducir el número de ganadores.</li>
+ *     </ul>
+ *   </li>
  *   <li>Persistir {@link CierreQuiniela} + {@link GanadorQuiniela}.</li>
  *   <li>Cambiar todas las jugadas {@code ACTIVA} a {@code FINALIZADA}.</li>
  *   <li>Cambiar la quiniela a {@code FINALIZADA}.</li>
  * </ol>
  *
- * <h2>Estrategia de desempate (cuando más de 5 usuarios distintos empatan)</h2>
+ * <h2>Estrategia de desempate (solo cuando más de 5 usuarios distintos empatan en el puntaje máximo)</h2>
+ * <p>Se aplica en cascada; en cuanto un criterio reduce el grupo a ≤5 usuarios distintos,
+ * el proceso se detiene y esos son los ganadores. Si un criterio no logra reducir lo
+ * suficiente, se pasa al siguiente usando como base el subconjunto ya filtrado.</p>
  * <ol>
  *   <li>Desempate 1 — Pronósticos más difíciles: gana quien acertó más pronósticos
- *       del tipo con mayor puntaje definido en el catálogo.</li>
+ *       del/los tipo(s) con mayor puntaje definido en el catálogo. Si varios tipos
+ *       empatan en el puntaje máximo, se cuentan los aciertos combinados de todos
+ *       esos tipos en conjunto.</li>
  *   <li>Desempate 2 — Mayor número de aciertos totales: gana quien acertó más
  *       pronósticos en total (de cualquier tipo).</li>
  *   <li>Desempate 3 — Último partido acertado: gana quien acertó al menos un
  *       pronóstico del último partido de la quiniela (por fecha).</li>
  *   <li>Empate definitivo: si persiste el empate tras los 3 criterios, todos
- *       los finalistas son declarados ganadores.</li>
+ *       los finalistas son declarados ganadores (puede ser un número superior a 5;
+ *       este umbral solo dispara el desempate, no es un tope máximo de ganadores).</li>
  * </ol>
  */
 @Service
@@ -59,6 +88,12 @@ public class CierreQuinielaService {
     /** Umbral: se aplican desempates cuando hay más de este número de usuarios distintos empatados. */
     private static final int UMBRAL_DESEMPATE = 5;
 
+    /**
+     * Comisión de la casa: porcentaje que se retiene de la bolsa acumulada
+     * ANTES de repartir el premio entre los ganadores. 0.10 = 10%.
+     */
+    private static final BigDecimal PORCENTAJE_COMISION = new BigDecimal("0.10");
+
     private final QuinielaRepository        quinielaRepo;
     private final PartidoRepository         partidoRepo;
     private final JugadaRepository          jugadaRepo;
@@ -67,6 +102,7 @@ public class CierreQuinielaService {
     private final PronosticoJugadoRepository pronosticoRepo;
     private final TipoPronosticoRepository  tipoPronosticoRepo;
     private final UserProfileRepository     perfilRepo;
+    private final ApplicationEventPublisher eventPublisher;
 
     public CierreQuinielaService(QuinielaRepository quinielaRepo,
                                  PartidoRepository partidoRepo,
@@ -75,7 +111,8 @@ public class CierreQuinielaService {
                                  GanadorQuinielaRepository ganadorRepo,
                                  PronosticoJugadoRepository pronosticoRepo,
                                  TipoPronosticoRepository tipoPronosticoRepo,
-                                 UserProfileRepository perfilRepo) {
+                                 UserProfileRepository perfilRepo,
+                                 ApplicationEventPublisher eventPublisher) {
         this.quinielaRepo       = quinielaRepo;
         this.partidoRepo        = partidoRepo;
         this.jugadaRepo         = jugadaRepo;
@@ -84,6 +121,7 @@ public class CierreQuinielaService {
         this.pronosticoRepo     = pronosticoRepo;
         this.tipoPronosticoRepo = tipoPronosticoRepo;
         this.perfilRepo         = perfilRepo;
+        this.eventPublisher     = eventPublisher;
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -118,7 +156,7 @@ public class CierreQuinielaService {
             CierreQuiniela cierre = cierreRepo.findByQuinielaId(quinielaId).get();
             List<GanadorQuiniela> ganadores =
                     ganadorRepo.findByCierreQuinielaIdOrderByPosicionAsc(cierre.getId());
-            return CierreQuinielaResponse.from(cierre, ganadores);
+            return CierreQuinielaResponse.from(cierre, ganadores, resolverTelefonos(ganadores));
         }
 
         // ── 4. Todos los partidos deben estar en estado terminal ──────
@@ -189,9 +227,37 @@ public class CierreQuinielaService {
         cierre.setFechaCierre(ahora);
         cierreRepo.save(cierre);
 
-        // ── 10. Persistir GanadorQuiniela ─────────────────────────────
+        // ── 10. Repartir el premio monetario en partes iguales entre ganadores ──
+        // Premio disponible = bolsa acumulada (suma de pagos APROBADOS de la quiniela)
+        // MENOS la comision de la casa (10%). Sobre ese resultado neto se reparte
+        // en partes iguales entre los ganadores.
+        // Se reparte en montos de 2 decimales; si la división deja centavos
+        // sobrantes por redondeo, se asignan uno a uno a los primeros ganadores
+        // para que la suma exacta de los premios individuales sea igual al premio neto.
+        BigDecimal bolsa = quiniela.getBolsaAcumulada() == null
+                            ? BigDecimal.ZERO : quiniela.getBolsaAcumulada();
+        BigDecimal montoComision = bolsa.multiply(PORCENTAJE_COMISION)
+                                         .setScale(2, RoundingMode.HALF_UP);
+        BigDecimal premioNeto = bolsa.subtract(montoComision);
+
+        cierre.setBolsaAcumuladaSnapshot(bolsa);
+        cierre.setPorcentajeComision(PORCENTAJE_COMISION);
+        cierre.setMontoComision(montoComision);
+        cierre.setPremioTotalRepartido(premioNeto);
+        cierreRepo.save(cierre);
+
+        int totalGanadoresCierre = ganadoras.size();
+        BigDecimal montoBase = totalGanadoresCierre > 0
+                ? premioNeto.divide(BigDecimal.valueOf(totalGanadoresCierre), 2, RoundingMode.DOWN)
+                : BigDecimal.ZERO;
+        BigDecimal centavoUnidad = new BigDecimal("0.01");
+        BigDecimal restante = premioNeto.subtract(montoBase.multiply(BigDecimal.valueOf(totalGanadoresCierre)));
+        int centavosSobrantes = restante.divide(centavoUnidad, 0, RoundingMode.HALF_UP).intValue();
+
+        // ── 11. Persistir GanadorQuiniela ──────────────────────────────
         List<GanadorQuiniela> registrosGanador = new ArrayList<>();
-        for (Jugada jugada : ganadoras) {
+        for (int i = 0; i < ganadoras.size(); i++) {
+            Jugada jugada = ganadoras.get(i);
             GanadorQuiniela g = new GanadorQuiniela();
             g.setCierreQuiniela(cierre);
             g.setJugada(jugada);
@@ -201,9 +267,21 @@ public class CierreQuinielaService {
             g.setPosicion(1); // todos los ganadores son posición 1 (empate o único)
             g.setCriterioAplicado(criterio);
             g.setNombreCompleto(resolverNombreCompleto(jugada.getUsuario()));
+
+            BigDecimal montoPremio = montoBase;
+            if (i < centavosSobrantes) {
+                montoPremio = montoPremio.add(centavoUnidad);
+            }
+            g.setMontoPremio(montoPremio);
+            g.setEstadoPremio(EstadoPremio.PENDIENTE);
+
             registrosGanador.add(g);
         }
         ganadorRepo.saveAll(registrosGanador);
+
+        String nombreQuiniela = quiniela.getNombre();
+        registrosGanador.forEach(g -> eventPublisher.publishEvent(new JugadaGanadoraEvent(
+                g.getId(), g.getUsuario().getId(), nombreQuiniela, g.getMontoPremio())));
 
         // ── 11. Actualizar posición final y esGanadora en TODAS las jugadas elegibles
         Set<Long> idsGanadoras = ganadoras.stream()
@@ -236,7 +314,7 @@ public class CierreQuinielaService {
         quiniela.setEstado(EstadoQuiniela.FINALIZADA);
         quinielaRepo.save(quiniela);
 
-        return CierreQuinielaResponse.from(cierre, registrosGanador);
+        return CierreQuinielaResponse.from(cierre, registrosGanador, resolverTelefonos(registrosGanador));
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -255,7 +333,45 @@ public class CierreQuinielaService {
                         " aun no tiene un cierre registrado."));
         List<GanadorQuiniela> ganadores =
                 ganadorRepo.findByCierreQuinielaIdOrderByPosicionAsc(cierre.getId());
-        return CierreQuinielaResponse.from(cierre, ganadores);
+        return CierreQuinielaResponse.from(cierre, ganadores, resolverTelefonos(ganadores));
+    }
+
+    /**
+     * Obtiene el cierre para un usuario jugador. Si el usuario NO participó en la quiniela
+     * entonces la URL del comprobante 'otros' se oculta en las respuestas de los ganadores.
+     */
+    @Transactional(readOnly = true)
+    public CierreQuinielaResponse obtenerCierre(Long quinielaId, Long usuarioId) {
+        CierreQuiniela cierre = cierreRepo.findByQuinielaId(quinielaId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "La quiniela id=" + quinielaId +
+                                " aun no tiene un cierre registrado."));
+        List<GanadorQuiniela> ganadores =
+                ganadorRepo.findByCierreQuinielaIdOrderByPosicionAsc(cierre.getId());
+
+        CierreQuinielaResponse resp = CierreQuinielaResponse.from(cierre, ganadores, resolverTelefonos(ganadores));
+
+        if (usuarioId == null) return resp;
+
+        // comprobar si el usuario tiene al menos una jugada registrada en la quiniela
+        boolean participo = !jugadaRepo.findByUsuarioIdAndQuinielaId(usuarioId, quinielaId).isEmpty();
+
+        if (!participo && resp.getGanadores() != null) {
+            // ocultar comprobantePremioOtrosUrl para cada ganador
+            resp.getGanadores().forEach(g -> g.setComprobantePremioOtrosUrl(null));
+        }
+        return resp;
+    }
+
+    /** Resuelve el teléfono de perfil de cada usuario ganador, indexado por su id. */
+    private Map<Long, String> resolverTelefonos(List<GanadorQuiniela> ganadores) {
+        Map<Long, String> telefonos = new HashMap<>();
+        for (GanadorQuiniela g : ganadores) {
+            Long usuarioId = g.getUsuario().getId();
+            telefonos.computeIfAbsent(usuarioId, id ->
+                    perfilRepo.findByUserId(id).map(UserProfile::getTelefono).orElse(null));
+        }
+        return telefonos;
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -265,18 +381,24 @@ public class CierreQuinielaService {
     private ResultadoDesempate aplicarDesempate(List<Jugada> candidatas, Long quinielaId) {
 
         // ── Desempate 1: Pronósticos más difíciles ────────────────────
-        // Encontrar el TipoPronostico con mayor puntaje en el catálogo
+        // Encontrar el/los TipoPronostico con mayor puntaje en el catálogo.
+        // Si varios tipos empatan en el puntaje máximo, se consideran todos en conjunto
+        // (se cuentan aciertos combinados de cualquiera de esos tipos).
         List<TipoPronostico> tipos = tipoPronosticoRepo.findByActivoTrue();
-        TipoPronostico tipoDificil = tipos.stream()
-                .max(Comparator.comparingInt(TipoPronostico::getPuntos))
-                .orElse(null);
+        int maxPuntajeTipo = tipos.stream()
+                .mapToInt(TipoPronostico::getPuntos)
+                .max()
+                .orElse(0);
+        List<Long> tiposDificilesIds = tipos.stream()
+                .filter(t -> t.getPuntos() == maxPuntajeTipo)
+                .map(TipoPronostico::getId)
+                .collect(Collectors.toList());
 
-        if (tipoDificil != null) {
-            final Long tipoId = tipoDificil.getId();
+        if (!tiposDificilesIds.isEmpty()) {
             Map<Long, Long> aciertosPorJugada = candidatas.stream()
                     .collect(Collectors.toMap(
                             Jugada::getId,
-                            j -> pronosticoRepo.countAciertosPorTipo(j.getId(), tipoId)));
+                            j -> pronosticoRepo.countAciertosPorTipos(j.getId(), tiposDificilesIds)));
 
             long maxAciertos1 = aciertosPorJugada.values().stream()
                     .mapToLong(Long::longValue).max().orElse(0);

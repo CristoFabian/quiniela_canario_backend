@@ -2,6 +2,7 @@ package com.quinielas.del.canario.api.entity;
 
 import jakarta.persistence.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
@@ -66,6 +67,32 @@ public class CierreQuiniela {
     @Column(name = "fecha_cierre", nullable = false, updatable = false)
     private LocalDateTime fechaCierre;
 
+    // ─── Auditoría del reparto del premio ──────────────────────────────
+
+    /**
+     * Bolsa acumulada de la quiniela al momento del cierre (snapshot inmutable),
+     * antes de descontar la comisión de la casa.
+     */
+    @Column(name = "bolsa_acumulada_snapshot", precision = 10, scale = 2)
+    private BigDecimal bolsaAcumuladaSnapshot;
+
+    /**
+     * Porcentaje de comisión aplicado sobre la bolsa acumulada (ej. 0.10 = 10%).
+     */
+    @Column(name = "porcentaje_comision", precision = 5, scale = 4)
+    private BigDecimal porcentajeComision;
+
+    /** Monto de comisión retenido (bolsaAcumuladaSnapshot * porcentajeComision). */
+    @Column(name = "monto_comision", precision = 10, scale = 2)
+    private BigDecimal montoComision;
+
+    /**
+     * Premio total efectivamente repartido entre los ganadores
+     * (bolsaAcumuladaSnapshot - montoComision).
+     */
+    @Column(name = "premio_total_repartido", precision = 10, scale = 2)
+    private BigDecimal premioTotalRepartido;
+
     // ─── Constructores ────────────────────────────────────────────────
     public CierreQuiniela() {}
 
@@ -96,6 +123,18 @@ public class CierreQuiniela {
 
     public LocalDateTime getFechaCierre()                  { return fechaCierre; }
     public void setFechaCierre(LocalDateTime v)            { this.fechaCierre = v; }
+
+    public BigDecimal getBolsaAcumuladaSnapshot()          { return bolsaAcumuladaSnapshot; }
+    public void setBolsaAcumuladaSnapshot(BigDecimal v)    { this.bolsaAcumuladaSnapshot = v; }
+
+    public BigDecimal getPorcentajeComision()              { return porcentajeComision; }
+    public void setPorcentajeComision(BigDecimal v)        { this.porcentajeComision = v; }
+
+    public BigDecimal getMontoComision()                   { return montoComision; }
+    public void setMontoComision(BigDecimal v)             { this.montoComision = v; }
+
+    public BigDecimal getPremioTotalRepartido()            { return premioTotalRepartido; }
+    public void setPremioTotalRepartido(BigDecimal v)      { this.premioTotalRepartido = v; }
 }
 
 

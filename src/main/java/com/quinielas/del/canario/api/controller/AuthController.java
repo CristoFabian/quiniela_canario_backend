@@ -3,6 +3,7 @@ package com.quinielas.del.canario.api.controller;
 import com.quinielas.del.canario.api.dto.AuthResponse;
 import com.quinielas.del.canario.api.dto.LoginRequest;
 import com.quinielas.del.canario.api.dto.RegisterRequest;
+import com.quinielas.del.canario.api.dto.ResetPasswordRequest;
 import com.quinielas.del.canario.api.service.AuthService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -26,6 +27,12 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
         return ResponseEntity.ok(authService.login(request));
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request);
+        return ResponseEntity.noContent().build();
     }
 
 }

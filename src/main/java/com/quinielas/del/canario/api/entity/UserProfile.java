@@ -2,6 +2,7 @@ package com.quinielas.del.canario.api.entity;
 
 import jakarta.persistence.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -47,6 +48,10 @@ public class UserProfile {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private EstadoPerfil estado = EstadoPerfil.INCOMPLETO;
+
+    /** Crédito disponible por pagos verificados manualmente fuera de la ventana de participación. */
+    @Column(name = "saldo_a_favor", nullable = false, precision = 10, scale = 2)
+    private BigDecimal saldoAFavor = BigDecimal.ZERO;
 
     // ─── Relación (lado propietario → tiene la FK en la tabla) ───────
     @OneToOne(fetch = FetchType.LAZY)
@@ -128,6 +133,11 @@ public class UserProfile {
 
     public EstadoPerfil getEstado()                  { return estado; }
     public void setEstado(EstadoPerfil estado)        { this.estado = estado; }
+
+    public BigDecimal getSaldoAFavor() { return saldoAFavor; }
+    public void setSaldoAFavor(BigDecimal saldoAFavor) {
+        this.saldoAFavor = saldoAFavor == null ? BigDecimal.ZERO : saldoAFavor;
+    }
 
     public User getUser()                            { return user; }
     public void setUser(User user)                   { this.user = user; }

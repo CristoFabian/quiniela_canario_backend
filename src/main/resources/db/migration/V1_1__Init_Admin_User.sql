@@ -1,0 +1,74 @@
+-- ============================================================================
+-- SCRIPT DE INICIALIZACIÓN DE ADMINISTRADOR PARA PRODUCCIÓN
+-- ============================================================================
+--
+-- IMPORTANTE: Este script NO se ejecuta automáticamente.
+--
+-- USO MANUAL:
+-- 1. Conéctate a tu base de datos MySQL en OCI
+-- 2. Copia el comando INSERT de abajo (REEMPLAZA LA CONTRASEÑA)
+-- 3. Ejecuta en tu cliente MySQL
+--
+-- Ejemplo:
+--   mysql> USE quinielas_deportivas;
+--   mysql> INSERT INTO users VALUES (...);
+--
+-- ============================================================================
+--
+-- PASO 1: Generar un hash bcrypt de tu contraseña
+-- ────────────────────────────────────────────────
+--
+-- Opción A: Online (NO recomendado para contraseñas reales)
+--   https://bcrypt-generator.com/
+--
+-- Opción B: Desde la línea de comandos (RECOMENDADO)
+--
+--   # En Linux/Mac, si tienes Java:
+--   java -jar api-0.0.1-SNAPSHOT.jar --create-admin
+--
+--   # Con Python:
+--   python3 -c "import bcrypt; print(bcrypt.hashpw(b'tucontraseña', bcrypt.gensalt(12)).decode())"
+--
+--   # Con Node.js:
+--   node -e "const bcrypt = require('bcrypt'); bcrypt.hash('tucontraseña', 12, (err, hash) => console.log(hash));"
+--
+-- ============================================================================
+--
+-- PASO 2: Inserta el usuario admin
+-- ─────────────────────────────────
+--
+-- IMPORTANTE: REEMPLAZA:
+--   - 'admin' por tu nombre de usuario
+--   - 'admin@local.com' por un email válido
+--   - '$2a$12$...' por el hash bcrypt generado en el Paso 1
+--   - CURRENT_TIMESTAMP por la fecha actual si es necesario
+--
+-- Ejemplo con contraseña: "Admin123!@#Segura"
+-- Hash bcrypt: $2a$12$R9h7cIPz0gi.URNNX3kh2OPST9/PgBkqquzi.Ss7KIUgO2t0jKMm.
+--
+-- INSERT INTO users (username, email, password, role, activo, fecha_creacion)
+-- VALUES ('admin', 'admin@local.com', '$2a$12$R9h7cIPz0gi.URNNX3kh2OPST9/PgBkqquzi.Ss7KIUgO2t0jKMm.', 'ADMIN', true, CURRENT_TIMESTAMP);
+--
+-- INSERT INTO user_profiles (user_id, nombre_completo, cedula, telefono, foto_perfil, fecha_nacimiento, estado_perfil, fecha_actualizacion)
+-- SELECT id, NULL, NULL, NULL, NULL, NULL, 'INCOMPLETO', CURRENT_TIMESTAMP FROM users WHERE username = 'admin' LIMIT 1;
+--
+-- ============================================================================
+--
+-- VERIFICACIÓN
+-- ───────────
+-- Después de ejecutar, verifica:
+--   SELECT id, username, email, role, activo FROM users WHERE username = 'admin';
+--
+-- ============================================================================
+
+-- Ejemplo (SOLO PARA DESARROLLO, NO uses en producción sin cambiar credenciales)
+-- INSERT INTO users (username, email, password, role, activo, fecha_creacion)
+-- VALUES (
+--     'admin',
+--     'admin@local.com',
+--     '$2a$12$R9h7cIPz0gi.URNNX3kh2OPST9/PgBkqquzi.Ss7KIUgO2t0jKMm.',
+--     'ADMIN',
+--     true,
+--     CURRENT_TIMESTAMP
+-- );
+

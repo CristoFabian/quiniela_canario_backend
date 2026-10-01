@@ -53,6 +53,15 @@ public class AdminController {
             @RequestBody ChangeRoleRequest request) {
         return ResponseEntity.ok(adminService.changeUserRole(id, request.getRole()));
     }
+
+    /**
+     * Reactiva la cuenta de un usuario previamente desactivado (baja lógica).
+     * PUT /api/admin/usuarios/{id}/activar
+     */
+    @PutMapping("/usuarios/{id}/activar")
+    public ResponseEntity<UserProfileResponse> reactivarUsuario(@PathVariable Long id) {
+        return ResponseEntity.ok(adminService.reactivarUsuario(id));
+    }
 }
 
 

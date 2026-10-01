@@ -3,14 +3,17 @@ package com.quinielas.del.canario.api.service;
 import com.quinielas.del.canario.api.dto.AuthResponse;
 import com.quinielas.del.canario.api.dto.LoginRequest;
 import com.quinielas.del.canario.api.dto.RegisterRequest;
+import com.quinielas.del.canario.api.dto.ResetPasswordRequest;
 import com.quinielas.del.canario.api.entity.Role;
 import com.quinielas.del.canario.api.entity.User;
 import com.quinielas.del.canario.api.entity.UserProfile;
+import com.quinielas.del.canario.api.exception.CuentaInactivaException;
 import com.quinielas.del.canario.api.repository.UserProfileRepository;
 import com.quinielas.del.canario.api.repository.UserRepository;
 import com.quinielas.del.canario.api.security.JwtService;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -72,6 +75,8 @@ public class AuthService {
             authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(request.getUsername(), request.getPassword())
             );
+        } catch (DisabledException ex) {
+            throw new CuentaInactivaException("Tu cuenta ha sido desactivada.");
         } catch (AuthenticationException ex) {
             // Mensaje genérico → no filtra si el usuario existe o si el password es incorrecto
             throw new BadCredentialsException("Credenciales incorrectas");
@@ -87,5 +92,32 @@ public class AuthService {
                 .username(user.getUsername())
                 .role(user.getRole().name())
                 .build();
+    }
+
+    /**
+     * Restablece la contraseña de un usuario verificando su nombre de usuario y teléfono
+     * registrado en su perfil. No requiere sesión activa (recuperación por "olvidé mi contraseña").
+     */
+    public void resetPassword(ResetPasswordRequest request) {
+        if (!request.getNuevaPassword().equals(request.getConfirmarPassword())) {
+            throw new IllegalArgumentException("Las contraseñas no coinciden");
+        }
+
+        // Mensaje genérico → no revela si el usuario existe o si el teléfono es incorrecto
+        BadCredentialsException datosNoCoinciden =
+                new BadCredentialsException("Los datos proporcionados no coinciden con ningún usuario registrado");
+
+        User user = userRepository.findByUsername(request.getUsername())
+                .orElseThrow(() -> datosNoCoinciden);
+
+        UserProfile perfil = userProfileRepository.findByUserId(user.getId()).orElse(null);
+        String telefonoRegistrado = perfil != null ? perfil.getTelefono() : null;
+
+        if (telefonoRegistrado == null || !telefonoRegistrado.equals(request.getTelefono())) {
+            throw datosNoCoinciden;
+        }
+
+        user.setPassword(passwordEncoder.encode(request.getNuevaPassword()));
+        userRepository.save(user);
     }
 }

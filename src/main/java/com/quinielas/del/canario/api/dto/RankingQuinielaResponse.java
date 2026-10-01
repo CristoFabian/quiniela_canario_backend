@@ -62,6 +62,14 @@ public class RankingQuinielaResponse {
         /** true si esta jugada fue declarada ganadora en el cierre. */
         private boolean esGanador;
 
+        /**
+         * Pronósticos ya evaluados de esta jugada (partidos FINALIZADO/SUSPENDIDO/POSPUESTO).
+         * Permite a los jugadores ver el detalle de cómo se obtuvo el puntaje de cualquier
+         * posición del ranking, dando transparencia a la evaluación frente a los demás.
+         * No incluye pronósticos de partidos aún no jugados.
+         */
+        private List<PronosticoJugadoResponse> pronosticos;
+
         public PosicionRanking() {}
 
         // ─── Getters / Setters ────────────────────────────────────────
@@ -79,5 +87,8 @@ public class RankingQuinielaResponse {
 
         public boolean isEsGanador()                       { return esGanador; }
         public void    setEsGanador(boolean v)             { this.esGanador = v; }
+
+        public List<PronosticoJugadoResponse> getPronosticos()             { return pronosticos; }
+        public void    setPronosticos(List<PronosticoJugadoResponse> v)    { this.pronosticos = v; }
     }
 }

@@ -41,12 +41,23 @@ public class AdminService {
         return toProfile(user);
     }
 
+    // ─── Reactivar la cuenta de un usuario dado de baja ───────────────
+    public UserProfileResponse reactivarUsuario(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado con id: " + userId));
+
+        user.setActivo(true);
+        userRepository.save(user);
+        return toProfile(user);
+    }
+
     private UserProfileResponse toProfile(User user) {
         return new UserProfileResponse(
                 user.getId(),
                 user.getUsername(),
                 user.getEmail(),
-                user.getRole().name()
+                user.getRole().name(),
+                user.isActivo()
         );
     }
 }

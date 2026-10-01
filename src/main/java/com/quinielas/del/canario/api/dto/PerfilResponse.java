@@ -6,6 +6,7 @@ import com.quinielas.del.canario.api.entity.UserProfile;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 
 public class PerfilResponse {
 
@@ -15,6 +16,7 @@ public class PerfilResponse {
     private String email;
     private String role;
     private boolean activo;
+    private BigDecimal saldoAFavor;
 
     // ─── Datos de perfil ─────────────────────────────────────────────
     private String nombre;
@@ -40,6 +42,7 @@ public class PerfilResponse {
         r.email    = user.getEmail();
         r.role     = user.getRole().name();
         r.activo   = user.isActivo();
+        r.saldoAFavor = perfil != null ? perfil.getSaldoAFavor() : BigDecimal.ZERO;
 
         // perfil
         if (perfil != null) {
@@ -73,6 +76,8 @@ public class PerfilResponse {
 
     public boolean isActivo()                            { return activo; }
     public void setActivo(boolean activo)                { this.activo = activo; }
+    public BigDecimal getSaldoAFavor()                   { return saldoAFavor; }
+    public void setSaldoAFavor(BigDecimal saldoAFavor)   { this.saldoAFavor = saldoAFavor; }
 
     public String getNombre()                            { return nombre; }
     public void setNombre(String nombre)                 { this.nombre = nombre; }

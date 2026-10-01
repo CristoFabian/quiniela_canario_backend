@@ -1,0 +1,30 @@
+# ============================================================================
+# Archivo de Variables Terraform - EJEMPLO
+# ============================================================================
+#
+# ANTES DE USAR:
+# 1. Renombra este archivo a terraform.tfvars
+# 2. Completa los valores con tu información de OCI
+# 3. Genera una contraseña segura con: openssl rand -base64 32
+#
+# ⚠  NUNCA commitees este archivo a Git si contiene credenciales reales
+# Usa: git update-index --assume-unchanged terraform.tfvars
+#
+# ============================================================================
+
+# OCI API Credentials (obtén de tu OCI Console)
+tenancy_ocid       = "ocid1.tenancy.oc1..xxxxxxxxxxxxxxxx"
+user_ocid          = "ocid1.user.oc1..xxxxxxxxxxxxxxxx"
+private_key_path   = "~/.oci/oci_api_key.pem"
+fingerprint        = "xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx"
+ssh_public_key_path = "~/.ssh/id_rsa.pub"
+
+# Región y Compartment
+region         = "us-ashburn-1"  # o us-phoenix-1 si estás en otra región
+compartment_ocid = "ocid1.compartment.oc1..xxxxxxxxxxxxxxxx"
+
+# Credenciales del Administrador Inicial
+# ⚠  Genera una contraseña fuerte: openssl rand -base64 32
+admin_username = "admin_prod_2024"
+admin_password = "a7k2L9mP3qR5s8T1vW4xY6zB0cD2eF4gH6iJ8kL0mN2oP4qR"
+

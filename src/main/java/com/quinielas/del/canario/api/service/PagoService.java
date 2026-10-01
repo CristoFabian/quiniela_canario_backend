@@ -8,7 +8,12 @@ import com.quinielas.del.canario.api.repository.JugadaRepository;
 import com.quinielas.del.canario.api.repository.PagoRepository;
 import com.quinielas.del.canario.api.repository.PartidoRepository;
 import com.quinielas.del.canario.api.repository.PronosticoJugadoRepository;
+import com.quinielas.del.canario.api.repository.QuinielaRepository;
+import com.quinielas.del.canario.api.repository.UserProfileRepository;
+import com.quinielas.del.canario.api.event.PagoPendienteValidacionEvent;
+import com.quinielas.del.canario.api.event.PagoValidadoEvent;
 import com.quinielas.del.canario.api.util.FechaUtil;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,17 +37,26 @@ public class PagoService {
     private final FileStorageService          fileStorageService;
     private final PronosticoJugadoRepository  pronosticoJugadoRepo;
     private final PartidoRepository           partidoRepo;
+    private final QuinielaRepository          quinielaRepo;
+    private final UserProfileRepository       userProfileRepo;
+    private final ApplicationEventPublisher   eventPublisher;
 
     public PagoService(PagoRepository pagoRepo,
                        JugadaRepository jugadaRepo,
                        FileStorageService fileStorageService,
                        PronosticoJugadoRepository pronosticoJugadoRepo,
-                       PartidoRepository partidoRepo) {
+                       PartidoRepository partidoRepo,
+                       QuinielaRepository quinielaRepo,
+                       UserProfileRepository userProfileRepo,
+                       ApplicationEventPublisher eventPublisher) {
         this.pagoRepo             = pagoRepo;
         this.jugadaRepo           = jugadaRepo;
         this.fileStorageService   = fileStorageService;
         this.pronosticoJugadoRepo = pronosticoJugadoRepo;
         this.partidoRepo          = partidoRepo;
+        this.quinielaRepo         = quinielaRepo;
+        this.userProfileRepo      = userProfileRepo;
+        this.eventPublisher       = eventPublisher;
     }
 
     // ═════════════════════════════════════════════════════════════════
@@ -57,6 +71,7 @@ public class PagoService {
      *  - Las jugadas deben estar en estado CREADA.
      *  - Ninguna jugada puede estar ya asociada a un pago PENDIENTE o APROBADO.
      *  - El monto debe ser positivo.
+     *  - Debe enviarse un comprobante o marcar comprobanteWhatsapp=true.
      * Efecto:
      *  - Se crea el Pago en estado PENDIENTE.
      *  - Las jugadas pasan a estado PENDIENTE_VALIDACION.
@@ -65,7 +80,8 @@ public class PagoService {
     public PagoResponse crearPago(User usuario,
                                   List<Long> jugadaIds,
                                   BigDecimal monto,
-                                  MultipartFile comprobante) throws IOException {
+                                  MultipartFile comprobante,
+                                  boolean comprobanteWhatsapp) throws IOException {
         if (!usuario.isActivo()) {
             throw new IllegalArgumentException(
                     "Tu cuenta esta inactiva. Contacta al administrador.");
@@ -81,9 +97,105 @@ public class PagoService {
                     "El monto debe ser mayor a 0.");
         }
 
-        // Cargar y validar cada jugada
+        if ((comprobante == null || comprobante.isEmpty()) && !comprobanteWhatsapp) {
+            throw new IllegalArgumentException(
+                    "Debes subir un comprobante o indicar que lo enviarás por WhatsApp.");
+        }
+
+        List<Jugada> jugadas = validarYCargarJugadasParaPago(usuario, jugadaIds);
+
+        // Crear el pago (sin comprobante todavía; necesitamos el id generado)
+        Pago pago = new Pago();
+        pago.setUsuario(usuario);
+        pago.setMonto(monto);
+        pago.setJugadas(jugadas);
+        // Si no se adjunta archivo, el comprobante llegará por WhatsApp.
+        boolean sinComprobanteDigital = (comprobante == null || comprobante.isEmpty());
+        pago.setComprobanteWhatsapp(sinComprobanteDigital);
+        // Solo se marca en true cuando el administrador lo suba desde el detalle del pago.
+        pago.setComprobanteAdmin(false);
+        pagoRepo.save(pago); // genera el id
+
+        // Guardar comprobante con nombre pago_{id}_{uuid}.ext y actualizar
+        // Organizados por quiniela
+        if (comprobante != null && !comprobante.isEmpty()) {
+            String nombreQuiniela = jugadas.get(0).getQuiniela().getNombre();
+            String nombre = fileStorageService.guardarComprobante(comprobante, pago.getId(), nombreQuiniela);
+            pago.setComprobanteUrl(nombre);
+            pagoRepo.save(pago);
+        }
+
+        // Cambiar estado de las jugadas a PENDIENTE_VALIDACION
+        jugadas.forEach(j -> j.setEstado(EstadoJugada.PENDIENTE_VALIDACION));
+        jugadaRepo.saveAll(jugadas);
+
+        eventPublisher.publishEvent(
+                new PagoPendienteValidacionEvent(pago.getId(), usuario.getUsername(), monto));
+
+        return PagoResponse.from(pago);
+    }
+
+    /**
+     * El jugador paga con su saldo a favor acumulado (créditos de pagos verificados
+     * manualmente fuera de ventana). Al ser saldo ya verificado, el pago queda
+     * APROBADO de inmediato y las jugadas se activan sin pasar por revisión.
+     */
+    @Transactional
+    public PagoResponse crearPagoConSaldo(User usuario, List<Long> jugadaIds, BigDecimal monto) {
+        if (!usuario.isActivo()) {
+            throw new IllegalArgumentException(
+                    "Tu cuenta esta inactiva. Contacta al administrador.");
+        }
+
+        if (jugadaIds == null || jugadaIds.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Debes indicar al menos una jugada a pagar.");
+        }
+
+        if (monto == null || monto.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException(
+                    "El monto debe ser mayor a 0.");
+        }
+
+        UserProfile perfil = userProfileRepo.findByUserId(usuario.getId())
+                .orElseThrow(() -> new IllegalStateException(
+                        "Debes completar tu perfil antes de pagar con saldo a favor."));
+        BigDecimal saldoDisponible = perfil.getSaldoAFavor();
+        if (saldoDisponible.compareTo(BigDecimal.ZERO) <= 0 || saldoDisponible.compareTo(monto) < 0) {
+            throw new IllegalArgumentException(
+                    "Tu saldo a favor ($" + saldoDisponible + ") es insuficiente para cubrir $" + monto + ".");
+        }
+
+        List<Jugada> jugadas = validarYCargarJugadasParaPago(usuario, jugadaIds);
+
+        perfil.setSaldoAFavor(saldoDisponible.subtract(monto));
+        userProfileRepo.save(perfil);
+
+        Pago pago = new Pago();
+        pago.setUsuario(usuario);
+        pago.setMonto(monto);
+        pago.setJugadas(jugadas);
+        pago.setEstado(EstadoPago.APROBADO);
+        pago.setObservacion("Pagado con saldo a favor.");
+        pago.setFechaValidacion(LocalDateTime.now(ZoneId.of("America/Mexico_City")));
+        pagoRepo.save(pago);
+
+        jugadas.forEach(j -> j.setEstado(EstadoJugada.ACTIVA));
+        jugadaRepo.saveAll(jugadas);
+
+        jugadas.stream()
+                .map(j -> j.getQuiniela().getId())
+                .distinct()
+                .forEach(this::recalcularBolsaAcumulada);
+
+        return PagoResponse.from(pago);
+    }
+
+    /** Carga y valida las jugadas de un pago: propiedad, misma quiniela, estado y pronósticos completos. */
+    private List<Jugada> validarYCargarJugadasParaPago(User usuario, List<Long> jugadaIds) {
         List<Jugada> jugadas = new ArrayList<>();
         List<EstadoPago> estadosActivos = List.of(EstadoPago.PENDIENTE, EstadoPago.APROBADO);
+        Long quinielaIdPago = null;
 
         for (Long jugadaId : jugadaIds) {
             Jugada jugada = jugadaRepo.findById(jugadaId)
@@ -94,6 +206,13 @@ public class PagoService {
             if (!jugada.getUsuario().getId().equals(usuario.getId())) {
                 throw new IllegalArgumentException(
                         "La jugada id=" + jugadaId + " no te pertenece.");
+            }
+
+            if (quinielaIdPago == null) {
+                quinielaIdPago = jugada.getQuiniela().getId();
+            } else if (!quinielaIdPago.equals(jugada.getQuiniela().getId())) {
+                throw new IllegalArgumentException(
+                        "Un pago solo puede cubrir jugadas de la misma quiniela.");
             }
 
             // Solo jugadas en CREADA pueden pagarse
@@ -125,25 +244,7 @@ public class PagoService {
             jugadas.add(jugada);
         }
 
-        // Crear el pago (sin comprobante todavía; necesitamos el id generado)
-        Pago pago = new Pago();
-        pago.setUsuario(usuario);
-        pago.setMonto(monto);
-        pago.setJugadas(jugadas);
-        pagoRepo.save(pago); // genera el id
-
-        // Guardar comprobante con nombre pago_{id}_{uuid}.ext y actualizar
-        if (comprobante != null && !comprobante.isEmpty()) {
-            String nombre = fileStorageService.guardarComprobante(comprobante, pago.getId());
-            pago.setComprobanteUrl(nombre);
-            pagoRepo.save(pago);
-        }
-
-        // Cambiar estado de las jugadas a PENDIENTE_VALIDACION
-        jugadas.forEach(j -> j.setEstado(EstadoJugada.PENDIENTE_VALIDACION));
-        jugadaRepo.saveAll(jugadas);
-
-        return PagoResponse.from(pago);
+        return jugadas;
     }
 
     /** Lista todos los pagos del jugador autenticado. */
@@ -252,8 +353,10 @@ public class PagoService {
         pagoRepo.save(nuevoPago);   // genera el id
 
         // 7. Guardar comprobante si se proporciona
+        // Organizados por quiniela
         if (comprobante != null && !comprobante.isEmpty()) {
-            String nombre = fileStorageService.guardarComprobante(comprobante, nuevoPago.getId());
+            String nombreQuiniela = jugadas.get(0).getQuiniela().getNombre();
+            String nombre = fileStorageService.guardarComprobante(comprobante, nuevoPago.getId(), nombreQuiniela);
             nuevoPago.setComprobanteUrl(nombre);
             pagoRepo.save(nuevoPago);
         }
@@ -351,8 +454,12 @@ public class PagoService {
     /**
      * El administrador aprueba o rechaza un pago.
      *
-     * APROBADO → jugadas pasan a ACTIVA.
-     * RECHAZADO → jugadas regresan a CREADA (el jugador puede reintentar el pago).
+     * APROBADO (dentro de la ventana) → jugadas pasan a ACTIVA.
+     * APROBADO (primer partido ya inició) → el admin confirmó manualmente la
+     *   transferencia fuera de tiempo; se otorga el monto como saldo a favor
+     *   en lugar de activar la jugada, que ya no puede participar.
+     * RECHAZADO → jugadas regresan a CREADA para reintentar, salvo que ya
+     *   hayan expirado por el inicio del primer partido.
      */
     @Transactional
     public PagoResponse validarPago(User admin, Long pagoId, ValidarPagoRequest request) {
@@ -365,28 +472,94 @@ public class PagoService {
         }
 
         EstadoPago nuevoEstadoPago = EstadoPago.valueOf(request.getEstado().toUpperCase());
+        List<Jugada> jugadas = pago.getJugadas();
+
+        boolean ventanaVencida = jugadas.stream()
+                .map(j -> j.getQuiniela().getId())
+                .distinct()
+                .anyMatch(this::primerPartidoYaInicio);
 
         LocalDateTime ahora = LocalDateTime.now(ZoneId.of("America/Mexico_City"));
         pago.setEstado(nuevoEstadoPago);
         pago.setValidadoPor(admin);
         pago.setFechaValidacion(ahora);
+
+        // ── Aprobación fuera de ventana: crédito verificado manualmente, sin activar ──
+        if (nuevoEstadoPago == EstadoPago.APROBADO && ventanaVencida) {
+            jugadas.stream()
+                    .filter(j -> j.getEstado() != EstadoJugada.ACTIVA
+                              && j.getEstado() != EstadoJugada.FINALIZADA)
+                    .forEach(j -> j.setEstado(EstadoJugada.EXPIRADA));
+            jugadaRepo.saveAll(jugadas);
+
+            acreditarSaldo(pago);
+            pago.setObservacion(componerObservacion(request.getObservacion(),
+                    "El primer partido ya había iniciado: el pago se verificó manualmente y " +
+                    "el monto quedó acreditado como saldo a favor en lugar de activar la jugada."));
+
+            Pago guardadoFueraVentana = pagoRepo.save(pago);
+            eventPublisher.publishEvent(new PagoValidadoEvent(
+                    guardadoFueraVentana.getId(), guardadoFueraVentana.getUsuario().getId(),
+                    nuevoEstadoPago, jugadas.get(0).getQuiniela().getNombre()));
+            return PagoResponse.from(guardadoFueraVentana);
+        }
+
         pago.setObservacion(request.getObservacion());
 
-        // Actualizar estado de las jugadas según la decisión
-        List<Jugada> jugadas = pago.getJugadas();
+        // Actualizar estado de las jugadas según la decisión (dentro de ventana)
         if (nuevoEstadoPago == EstadoPago.APROBADO) {
             jugadas.forEach(j -> j.setEstado(EstadoJugada.ACTIVA));
-        } else {
+        } else if (jugadas.stream().allMatch(j -> j.getEstado() == EstadoJugada.PENDIENTE_VALIDACION)) {
             // RECHAZADO: jugadas regresan a CREADA para que el jugador pueda reintentar
             jugadas.forEach(j -> j.setEstado(EstadoJugada.CREADA));
         }
         jugadaRepo.saveAll(jugadas);
 
-        return PagoResponse.from(pagoRepo.save(pago));
+        Pago guardado = pagoRepo.save(pago);
+
+        // Recalcular la bolsa acumulada de la quiniela afectada
+        // (suma de montos de pagos APROBADOS asociados a sus jugadas).
+        jugadas.stream()
+                .map(j -> j.getQuiniela().getId())
+                .distinct()
+                .forEach(this::recalcularBolsaAcumulada);
+
+        eventPublisher.publishEvent(new PagoValidadoEvent(
+                guardado.getId(), guardado.getUsuario().getId(),
+                nuevoEstadoPago, jugadas.get(0).getQuiniela().getNombre()));
+
+        return PagoResponse.from(guardado);
     }
 
-    // ═════════════════════════════════════════════════════════════════
-    //  JUGADOR — Subir / reemplazar comprobante
+    /** True si el primer partido (por fecha) de la quiniela ya inició, por estado o por reloj. */
+    private boolean primerPartidoYaInicio(Long quinielaId) {
+        LocalDateTime ahora = LocalDateTime.now(ZoneId.of("America/Mexico_City"));
+        return partidoRepo.findByQuinielaId(quinielaId).stream()
+                .min(Comparator.comparing(Partido::getFechaPartido))
+                .map(p -> p.getEstado() != EstadoPartido.PENDIENTE || !ahora.isBefore(p.getFechaPartido()))
+                .orElse(false);
+    }
+
+    /** Acredita el monto del pago al saldo del jugador una sola vez. */
+    private void acreditarSaldo(Pago pago) {
+        if (pago.isSaldoAcreditado()) return;
+
+        UserProfile perfil = userProfileRepo.findByUserId(pago.getUsuario().getId())
+                .orElseThrow(() -> new IllegalStateException(
+                        "El jugador no tiene un perfil asociado; no se puede acreditar el saldo."));
+
+        BigDecimal monto = pago.getMonto();
+        perfil.setSaldoAFavor(perfil.getSaldoAFavor().add(monto));
+        userProfileRepo.save(perfil);
+
+        pago.setSaldoAcreditado(true);
+        pago.setMontoSaldoAcreditado(monto);
+    }
+
+    private String componerObservacion(String delAdmin, String automatico) {
+        if (delAdmin == null || delAdmin.isBlank()) return automatico;
+        return delAdmin.trim() + " — " + automatico;
+    }
     // ═════════════════════════════════════════════════════════════════
 
     /**
@@ -413,11 +586,16 @@ public class PagoService {
         }
 
         // Eliminar comprobante anterior si existe
-        fileStorageService.eliminarComprobante(pago.getComprobanteUrl());
+        // Obtener el nombre de la quiniela para la nueva ubicación
+        String nombreQuiniela = pago.getJugadas().get(0).getQuiniela().getNombre();
+        fileStorageService.eliminarComprobante(pago.getComprobanteUrl(), nombreQuiniela);
 
         // Guardar nuevo comprobante (nombre: pago_{id}_{uuid}.ext)
-        String nombre = fileStorageService.guardarComprobante(archivo, pagoId);
+        // Organizados por quiniela
+        String nombre = fileStorageService.guardarComprobante(archivo, pagoId, nombreQuiniela);
         pago.setComprobanteUrl(nombre);
+        // El jugador ya subió el archivo él mismo; ya no se necesita la intervención del admin.
+        pago.setComprobanteAdmin(false);
 
         // Si el pago estaba RECHAZADO, resetear a PENDIENTE para nueva revisión
         if (pago.getEstado() == EstadoPago.RECHAZADO) {
@@ -466,14 +644,20 @@ public class PagoService {
                     "fue enviado por WhatsApp (comprobanteWhatsapp=true).");
         }
 
+        // Obtener el nombre de la quiniela para la ubicación
+        String nombreQuiniela = pago.getJugadas().get(0).getQuiniela().getNombre();
+
         if (archivoProvisto) {
             // Eliminar comprobante anterior si existe
-            fileStorageService.eliminarComprobante(pago.getComprobanteUrl());
-            String nombre = fileStorageService.guardarComprobante(archivo, pagoId);
+            fileStorageService.eliminarComprobante(pago.getComprobanteUrl(), nombreQuiniela);
+            String nombre = fileStorageService.guardarComprobante(archivo, pagoId, nombreQuiniela);
             pago.setComprobanteUrl(nombre);
+            // El comprobante quedó registrado porque el administrador lo cargó él mismo.
+            pago.setComprobanteAdmin(true);
         }
 
-        pago.setComprobanteWhatsapp(comprobanteWhatsapp);
+        // No se desactiva un comprobanteWhatsapp ya registrado desde la creación del pago.
+        pago.setComprobanteWhatsapp(pago.isComprobanteWhatsapp() || comprobanteWhatsapp);
 
         return PagoResponse.from(pagoRepo.save(pago));
     }
@@ -481,6 +665,8 @@ public class PagoService {
     /**
      * Devuelve el comprobante como {@code Resource} para su descarga por el admin.
      * El archivo NUNCA se expone por URL pública.
+     * Intenta cargar desde la carpeta organizada por quiniela; si no existe, intenta
+     * desde la carpeta raíz de comprobantes (compatibilidad con archivos antiguos).
      */
     public Resource obtenerComprobante(Long pagoId) throws IOException {
         Pago pago = buscarPagoOException(pagoId);
@@ -488,7 +674,15 @@ public class PagoService {
             throw new IllegalStateException(
                     "El pago id=" + pagoId + " no tiene comprobante adjunto.");
         }
-        return fileStorageService.cargarComprobante(pago.getComprobanteUrl());
+
+        try {
+            // Intentar desde la carpeta organizada por quiniela
+            String nombreQuiniela = pago.getJugadas().get(0).getQuiniela().getNombre();
+            return fileStorageService.cargarComprobante(pago.getComprobanteUrl(), nombreQuiniela);
+        } catch (IOException e) {
+            // Fallback: intentar desde la carpeta raíz (para archivos antiguos)
+            return fileStorageService.cargarComprobante(pago.getComprobanteUrl());
+        }
     }
 
     /**
@@ -514,8 +708,22 @@ public class PagoService {
         } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException(
                     "Estado invalido: '" + estado +
-                    "'. Valores permitidos: PENDIENTE, APROBADO, RECHAZADO.");
+                    "'. Valores permitidos: PENDIENTE, APROBADO, RECHAZADO, VENCIDO.");
         }
+    }
+
+    /**
+     * Recalcula y persiste la bolsa acumulada de una quiniela:
+     * suma de los montos de todos los pagos en estado APROBADO
+     * asociados a las jugadas que corresponden a esa quiniela.
+     */
+    private void recalcularBolsaAcumulada(Long quinielaId) {
+        Quiniela quiniela = quinielaRepo.findById(quinielaId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "Quiniela no encontrada con id: " + quinielaId));
+        BigDecimal total = pagoRepo.sumMontoAprobadoByQuinielaId(quinielaId);
+        quiniela.setBolsaAcumulada(total);
+        quinielaRepo.save(quiniela);
     }
 }
 

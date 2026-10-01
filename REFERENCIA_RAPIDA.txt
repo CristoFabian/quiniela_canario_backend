@@ -1,0 +1,131 @@
+# ⚡ REFERENCIA RÁPIDA (30 segundos)
+
+## 🎯 Tu Pregunta Respondida
+
+**¿Cómo agregar un usuario administrador desde el inicio de forma segura para Oracle Cloud?**
+
+**Respuesta:** Usar variables de entorno + AdminDataInitializer (componente Spring Boot).
+
+---
+
+## 🚀 3 PASOS (5 minutos)
+
+### 1️⃣ Generar Contraseña
+```bash
+openssl rand -base64 32
+```
+**Guarda el resultado**
+
+### 2️⃣ Variables de Entorno
+```bash
+export ADMIN_USERNAME="admin"
+export ADMIN_PASSWORD="<resultado_paso_1>"
+```
+
+### 3️⃣ Ejecutar
+```bash
+java -jar target/api-0.0.1-SNAPSHOT.jar
+```
+
+✅ **Admin creado automáticamente**
+
+---
+
+## 📍 ¿Dónde Está la Magia?
+
+| Componente | Ubicación |
+|------------|-----------|
+| **Inicializador** | `src/main/java/.../config/AdminDataInitializer.java` |
+| **Guía Completa** | `ADMIN_SETUP_GUIDE.md` |
+| **Rápido** | `QUICK_START_ADMIN.md` |
+| **Resumen** | `RESUMEN_ADMIN_INICIAL.md` (este archivo) |
+
+---
+
+## 🔐 Cómo Funciona
+
+1. App arranca → AdminDataInitializer se ejecuta
+2. Lee variables: `ADMIN_USERNAME`, `ADMIN_PASSWORD`
+3. Verifica si existe admin (no sobrescribe)
+4. **Encripta** password con BCrypt
+5. Crea usuario ADMIN en BD
+6. **Logs**: "✓ Administrador creado"
+
+---
+
+## 📋 Alternativas
+
+| Opción | Código | Tiempo |
+|--------|--------|--------|
+| **Variables Entorno** | `export` | 2 min |
+| **Script bash** | `./setup-admin-oci.sh` | 3 min |
+| **Script PowerShell** | `.\setup-admin-oci.ps1` | 3 min |
+| **Docker Compose** | `docker-compose up` | 4 min |
+| **Terraform (OCI)** | `terraform apply` | 5 min |
+
+---
+
+## ✅ Verificar que Funciona
+
+```bash
+# Ver en logs:
+tail -f app.log | grep "✓ Administrador"
+
+# Probar login:
+curl -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"..."}'
+
+# Respuesta: Token JWT + role ADMIN
+```
+
+---
+
+## 🎯 Para Producción (Oracle Cloud)
+
+```bash
+# En OCI Cloud Shell:
+export ADMIN_USERNAME="admin_prod"
+export ADMIN_PASSWORD=$(openssl rand -base64 32)
+java -jar api-0.0.1-SNAPSHOT.jar
+
+# O usar Terraform para automatizar TODO:
+cd terraform
+terraform apply -var="admin_username=admin_prod" \
+                -var="admin_password=$(openssl rand -base64 32)"
+```
+
+---
+
+## 🆘 Problemas?
+
+| Problema | Solución |
+|----------|----------|
+| "No se encontraron variables" | `export ADMIN_USERNAME=...` |
+| "Usuario ya existe" | Normal en 2º arranque. OK. |
+| "Contraseña muy corta" | Usar resultado de `openssl rand` |
+| "¿Y si olvido la contraseña?" | Resetea en BD o redeploy |
+
+---
+
+## 📚 Lee Esto Si...
+
+- ✅ "Necesito guía completa" → `ADMIN_SETUP_GUIDE.md`
+- ✅ "Quiero inicio rápido" → `QUICK_START_ADMIN.md`
+- ✅ "Necesito Terraform" → `terraform/main.tf`
+- ✅ "Necesito Docker" → `docker-compose.yml`
+- ✅ "Necesito CLI" → `setup-admin-oci.sh` o `.ps1`
+
+---
+
+## 🎉 LISTO
+
+Tu aplicación ahora:
+- ✅ Crea admin automáticamente
+- ✅ De forma segura (BCrypt)
+- ✅ Sin hardcoding (variables entorno)
+- ✅ Compatible con Oracle Cloud
+- ✅ Listo para producción
+
+**¡No necesitas hacer nada más! 🚀**
+

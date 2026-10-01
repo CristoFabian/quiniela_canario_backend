@@ -56,22 +56,29 @@ public interface PronosticoJugadoRepository extends JpaRepository<PronosticoJuga
             @Param("partidoId")    Long         partidoId,
             @Param("estadoJugada") com.quinielas.del.canario.api.entity.EstadoJugada estadoJugada);
 
+    /**
+     * Todos los pronósticos ya evaluados de un partido.
+     * Se usa para revertir puntos antes de recalcular tras corregir un resultado.
+     */
+    List<PronosticoJugado> findByPartidoIdAndEvaluadoTrue(@Param("partidoId") Long partidoId);
+
     // ─── Queries para desempate en cierre de quiniela ─────────────────
 
     /**
      * Cuenta cuántos pronósticos acertados (puntosObtenidos > 0) tiene una jugada
-     * para un tipo de pronóstico concreto.
+     * para un conjunto de tipos de pronóstico (usado cuando varios tipos empatan
+     * en el puntaje máximo del catálogo).
      * Usado en Desempate 1: pronósticos más difíciles.
      */
     @Query("""
            SELECT COUNT(pj) FROM PronosticoJugado pj
            WHERE pj.jugada.id              = :jugadaId
-             AND pj.tipoPronostico.id      = :tipoId
+             AND pj.tipoPronostico.id      IN :tipoIds
              AND pj.evaluado               = true
              AND pj.puntosObtenidos        > 0
            """)
-    long countAciertosPorTipo(@Param("jugadaId") Long jugadaId,
-                              @Param("tipoId")   Long tipoId);
+    long countAciertosPorTipos(@Param("jugadaId") Long jugadaId,
+                               @Param("tipoIds")  List<Long> tipoIds);
 
     /**
      * Cuenta el total de pronósticos acertados (puntosObtenidos > 0) de una jugada.

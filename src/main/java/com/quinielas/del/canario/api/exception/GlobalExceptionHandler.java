@@ -27,6 +27,12 @@ public class GlobalExceptionHandler {
         return buildError(HttpStatus.UNAUTHORIZED, "Credenciales incorrectas");
     }
 
+    // ─── Cuenta desactivada: se distingue de credenciales incorrectas ──
+    @ExceptionHandler(CuentaInactivaException.class)
+    public ResponseEntity<Map<String, Object>> handleCuentaInactiva(CuentaInactivaException ex) {
+        return buildError(HttpStatus.LOCKED, ex.getMessage());
+    }
+
     // ─── Sin permisos para el recurso (jugador accede a admin, etc.) ──
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<Map<String, Object>> handleAccessDenied(AccessDeniedException ex) {

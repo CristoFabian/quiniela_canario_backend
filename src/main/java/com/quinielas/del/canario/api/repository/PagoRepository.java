@@ -43,5 +43,24 @@ public interface PagoRepository extends JpaRepository<Pago, Long> {
             """)
     boolean existsPagoActivoParaJugada(@Param("jugadaId") Long jugadaId,
                                        @Param("estados") List<EstadoPago> estados);
+
+    /** Pago pendiente asociado a una jugada, usado al vencer la ventana de participación. */
+    List<Pago> findByJugadas_IdAndEstado(Long jugadaId, EstadoPago estado);
+
+    /**
+     * Suma de los montos de los pagos APROBADOS que cubren al menos una jugada
+     * de la quiniela indicada. Cada pago se cuenta una sola vez (EXISTS evita
+     * duplicar el monto cuando un pago cubre varias jugadas de la misma quiniela).
+     * Usada para calcular la bolsa acumulada de la quiniela.
+     */
+    @Query("""
+            SELECT COALESCE(SUM(p.monto), 0)
+            FROM Pago p
+            WHERE p.estado = com.quinielas.del.canario.api.entity.EstadoPago.APROBADO
+              AND EXISTS (
+                  SELECT 1 FROM p.jugadas j WHERE j.quiniela.id = :quinielaId
+              )
+            """)
+    java.math.BigDecimal sumMontoAprobadoByQuinielaId(@Param("quinielaId") Long quinielaId);
 }
 
